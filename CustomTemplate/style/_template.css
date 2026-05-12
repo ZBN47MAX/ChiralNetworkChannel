@@ -1,0 +1,411 @@
+/* ============================================================
+ * Chiral Network Channel — NEW THEME TEMPLATE
+ * ============================================================
+ *
+ * READ THIS FIRST — five-step recipe to ship your own theme:
+ *
+ * 1. Copy this file into the live theme folder:
+ *      CustomTemplate/style/_template.css  ──►  public/style/<your-id>.css
+ *
+ *    Examples of "<your-id>":  sepia / midnight / cyberpunk / blueprint /
+ *    pastel / nord / dracula / matrix.  Use lowercase letters, numbers,
+ *    and hyphens only — it ends up inside an HTML attribute.
+ *
+ * 2. Replace EVERY occurrence of the placeholder string `__YOUR_ID__`
+ *    in this file with your chosen id.  Two locations: the
+ *    `:root[data-theme="__YOUR_ID__"]` selector for the variable
+ *    palette, and (if you keep the optional effect blocks at the
+ *    end) the same selector again for those.
+ *
+ * 3. Fill in the `--theme-name` value.  This string is what appears
+ *    in the theme dropdown in EVERY UI language — theme names do
+ *    not get translated.  Pick something readable and short.
+ *
+ * 4. Set every variable in the palette block.  Each variable has
+ *    inline comments explaining what it controls, what range looks
+ *    good, and the values the bundled themes (dark / light /
+ *    division) chose for reference.  You can mostly tweak by
+ *    starting from one of the bundled themes and changing accents.
+ *
+ * 5. Register the theme so the app loads it.  Three edits in
+ *    `public/index.html`:
+ *
+ *    a) Near the other theme `<link>`s in `<head>`:
+ *         <link rel="stylesheet" href="style/<your-id>.css?v=__BUILD__">
+ *
+ *    b) The inline `KNOWN_THEMES` array in the first-paint <script>
+ *       block (right above the link list):
+ *         var KNOWN_THEMES = ['dark', 'light', 'division', '<your-id>'];
+ *
+ *    c) Inside `#theme-select`:
+ *         <option value="<your-id>"><any placeholder></option>
+ *       The placeholder text is overwritten at boot by `app.js`
+ *       reading `--theme-name`, so it's just there to keep the
+ *       dropdown non-empty during the brief moment between page
+ *       load and JS startup.  Anything readable works.
+ *
+ * Optional bonuses (uncomment the blocks at the bottom of this
+ * file to enable):
+ *   - Decorative overlay (scanline / vignette / grid)
+ *   - Falling particle effect (snow / leaves / sparkles)
+ *
+ * Both effect blocks ship with `[data-view="home"]` qualifiers so
+ * they only render on the main collection-list page — task-focused
+ * screens (detail / player / admin / etc.) stay distraction-free.
+ *
+ * That is the entire contract.  You do NOT touch `app.js`, you do
+ * NOT touch `style.css`, you do NOT touch any `language/*.json`.
+ *
+ * ============================================================
+ */
+
+/**
+ * @brief Variable palette for the theme.
+ *
+ * The selector binds every variable to an `<html data-theme="...">`
+ * activation.  When the user picks this theme from the dropdown,
+ * `<html>` gets `data-theme="__YOUR_ID__"` stamped on it and every
+ * variable below cascades into every component that uses
+ * `var(--<name>)` (basically the whole app).  Switching to another
+ * theme withdraws this block automatically.
+ */
+:root[data-theme="__YOUR_ID__"] {
+
+  /* ──────────────────────────────────────────────────────────
+   * Display name — REQUIRED.
+   *
+   * This is the string the theme dropdown shows.  It is read by
+   * `app.js` at boot via getComputedStyle and is locale-independent:
+   * whatever you write here shows up identically in zh / en /
+   * zh-TW / any future language.
+   *
+   * Keep it short.  The dropdown sits in the top-right of the
+   * header on a 320px-wide phone screen with several other
+   * controls; long names will overflow or wrap.
+   *
+   *   Recommended max length: ~12 characters
+   *   Bundled examples: "Dark", "Light", "Division"
+   * ────────────────────────────────────────────────────────── */
+  --theme-name: "Your Theme Name";
+
+
+  /* ──────────────────────────────────────────────────────────
+   * Surface palette — five tiers, each slightly lifted from the
+   * one below it.  Used as background colors throughout the UI.
+   *
+   *   --bg          The outermost page background (everywhere outside panels)
+   *   --surface     Standard panel / card / dialog body background
+   *   --surface-2   "Lifted" panel — used by sub-panels / hovered cards
+   *   --hover       Hover state on rows (history, comments, episode list)
+   *   --active      Active-press / selected-row state
+   *
+   * The progression bg → surface → surface-2 → hover → active should
+   * read as four distinguishable shades.  In dark themes lift each
+   * step ~5 lightness units; in light themes drop ~5 units.  Avoid
+   * pure-black or pure-white at the extremes — they crush detail.
+   *
+   *   Bundled examples for reference:
+   *     dark:     #05080c → #0b121a → #121c27 → #182535 → #1f3042
+   *     light:    #f6f6f6 → #ffffff → #f0f0f0 → #e8e8e8 → #d8d8d8
+   *     division: #0a0c10 → #14181f → #1c2129 → #25303c → #2e3d4d
+   * ────────────────────────────────────────────────────────── */
+  --bg:        #000000;   /* TODO */
+  --surface:   #000000;   /* TODO */
+  --surface-2: #000000;   /* TODO */
+  --hover:     #000000;   /* TODO */
+  --active:    #000000;   /* TODO */
+
+
+  /* ──────────────────────────────────────────────────────────
+   * Border palette — two strokes for the wireframe weight.
+   *
+   *   --border         Faint divisions (table rows, sub-section separators)
+   *   --border-strong  Emphasis edges (panel outlines, focused control)
+   *
+   * The contrast between bg and --border should be ~2:1 visible at
+   * arm's length on a typical monitor.  Going too low makes panels
+   * float without grounding; too high turns the page into a
+   * checkerboard.
+   *
+   *   Bundled examples:
+   *     dark:     #243545 / #3a5166
+   *     light:    #222222 / #000000
+   *     division: #2a3340 / #ff7a00  ← strong border doubles as brand color
+   * ────────────────────────────────────────────────────────── */
+  --border:        #000000;   /* TODO */
+  --border-strong: #000000;   /* TODO */
+
+
+  /* ──────────────────────────────────────────────────────────
+   * Text palette — three tiers of foreground.
+   *
+   *   --text        Primary body / heading text
+   *   --text-dim    Secondary / metadata / placeholder
+   *   --text-faint  Tertiary / disabled / ghost
+   *
+   * --text needs ≥ 4.5:1 contrast against --surface for WCAG AA
+   * body-text legibility.  --text-dim around 3:1 is fine for short
+   * labels; --text-faint can drop to 2:1 since it labels states
+   * the user has already chosen to ignore.
+   *
+   *   Bundled examples:
+   *     dark:     #dde6ed / #6b8294 / #3a4e60
+   *     light:    #000000 / #555555 / #999999
+   *     division: #e0d8c8 / #8a7860 / #5a4e3e   ← warm beige instead of white
+   * ────────────────────────────────────────────────────────── */
+  --text:       #000000;   /* TODO */
+  --text-dim:   #000000;   /* TODO */
+  --text-faint: #000000;   /* TODO */
+
+
+  /* ──────────────────────────────────────────────────────────
+   * Accent / focus palette — three highlight roles.
+   *
+   *   --accent      Brand color: active chip, primary button, link, brand
+   *   --accent-dim  Darker variant: disabled, hover for accent surfaces
+   *   --focus       Keyboard-focus ring; should be VISIBLY different
+   *                 from accent (otherwise focus on accent buttons
+   *                 disappears).  Often a brighter / lighter accent.
+   *
+   *   Bundled examples:
+   *     dark:     #8fb5c5 / #4a6b7d / #c4dce6   ← cool desaturated cyan
+   *     light:    #000000 / #555555 / #000000   ← monochrome
+   *     division: #ff7a00 / #b35400 / #ffaa44   ← signature orange + peach focus
+   * ────────────────────────────────────────────────────────── */
+  --accent:     #000000;   /* TODO */
+  --accent-dim: #000000;   /* TODO */
+  --focus:      #000000;   /* TODO */
+
+
+  /* ──────────────────────────────────────────────────────────
+   * Status palette — error / success.
+   *
+   * Used by toasts, form validation, status indicators.  --danger
+   * should be unambiguously alarming (bright red) unless your
+   * theme intentionally trades alarm for harmony — see the dark
+   * theme, which uses muted red so error states don't jar the
+   * cold HUD aesthetic.
+   *
+   *   Bundled examples:
+   *     dark:     #c77272 / #7cb084   ← muted, leans cool
+   *     light:    #333333 / #333333   ← gray; status differentiated by icon, not hue
+   *     division: #ff3b30 / #4caf50   ← saturated alarm red, cool muted green
+   * ────────────────────────────────────────────────────────── */
+  --danger:  #000000;   /* TODO */
+  --success: #000000;   /* TODO */
+
+
+  /* ──────────────────────────────────────────────────────────
+   * Scrim palette — three tiers of overlay translucency.
+   *
+   * Used by dialog backdrops, mini-player letterbox, video player
+   * controls fade-in.  Three tiers let callers pick the right
+   * opacity for the layer they sit on:
+   *
+   *   --scrim-deep   Heaviest blackout (modal dialogs)
+   *   --scrim-mid    Mid (mini-player container)
+   *   --scrim-light  Subtle haze (Plyr controls)
+   *
+   * The base color should match your --bg or --surface so the
+   * scrim reads as "darkened version of the same room", not a
+   * different colored overlay.  Light themes invert this — scrims
+   * are white-tinted, fading to opacity, so dialogs read as a
+   * paper sheet on top of the wireframe.
+   *
+   *   Bundled examples (alpha steps 0.92 / 0.60 / 0.15):
+   *     dark:     rgba(5,8,12,...)
+   *     light:    rgba(255,255,255,...)
+   *     division: rgba(10,12,16,...)
+   * ────────────────────────────────────────────────────────── */
+  --scrim-deep:  rgba(0, 0, 0, 0.92);   /* TODO */
+  --scrim-mid:   rgba(0, 0, 0, 0.60);   /* TODO */
+  --scrim-light: rgba(0, 0, 0, 0.15);   /* TODO */
+
+
+  /* ──────────────────────────────────────────────────────────
+   * Composite shadow — used by lifted panels (.dialog, mini-player).
+   *
+   * The default recipe is `0 0 0 1px <border>, 0 4px 20px <fade>` —
+   * a 1px outline plus a soft drop-shadow.  Light themes typically
+   * skip the soft shadow (paper aesthetic); accent-heavy themes
+   * (like Division) tint the shadow with an alpha-low version of
+   * the brand color so lifted panels glow.
+   *
+   *   Bundled examples:
+   *     dark:     0 0 0 1px var(--border), 0 4px 20px rgba(0,0,0,0.4)
+   *     light:    0 0 0 1px var(--border)            ← flat blueprint
+   *     division: 0 0 0 1px var(--border-strong), 0 4px 24px rgba(255,122,0,0.15)
+   * ────────────────────────────────────────────────────────── */
+  --panel-shadow: 0 0 0 1px var(--border);   /* TODO */
+}
+
+
+/* ============================================================
+ * OPTIONAL — DECORATIVE EFFECTS
+ *
+ * Everything below is scaffolding for theme-side animation /
+ * overlay effects.  Uncomment and tweak as desired, or delete the
+ * whole bottom half of the file if your theme is palette-only.
+ *
+ * IMPORTANT — every decorative effect MUST be qualified with
+ * `[data-view="home"]` so it only appears on the main page.  The
+ * `<html>` element's `data-view` attribute is kept in sync by
+ * `app.js`'s watchActiveView() observer; values include "home",
+ * "detail", "player", "gallery", "admin", "login", "search",
+ * "novel-reader", "history", "audio-player".  Limiting to "home"
+ * keeps the rest of the app distraction-free.
+ *
+ * Ambient effects also need a `prefers-reduced-motion` fallback
+ * so users who set OS-level "minimize animation" still get the
+ * theme's visual signature without the motion that gives some
+ * users motion sickness or performance pain.
+ * ============================================================ */
+
+
+/* ──────────────────────────────────────────────────────────────
+ * EXAMPLE 1 — Scanline overlay (CRT / HUD aesthetic).
+ *
+ * Pinned full-viewport on `body::after`, drifting downward
+ * imperceptibly slow.  Adjust the 4px stripe height and the 9s
+ * cycle time to taste.  Increase the rgba alpha for more visible
+ * lines; lower for whisper-faint.
+ * ────────────────────────────────────────────────────────────── */
+
+/*
+:root[data-theme="__YOUR_ID__"][data-view="home"] body::after {
+  content: "";
+  position: fixed;
+  inset: -4px 0 -100vh 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.06) 0,
+    rgba(255, 255, 255, 0.06) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  animation: __YOUR_ID__-scanline 9s linear infinite;
+  will-change: transform;
+}
+
+@keyframes __YOUR_ID__-scanline {
+  from { transform: translateY(0); }
+  to   { transform: translateY(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="__YOUR_ID__"][data-view="home"] body::after {
+    animation: none;
+  }
+}
+*/
+
+
+/* ──────────────────────────────────────────────────────────────
+ * EXAMPLE 2 — Falling particle layer (snow / petals / leaves).
+ *
+ * Two-layer parallax — far flakes (small / slow / faint) on
+ * `<html>::before`, near flakes (larger / faster / brighter) on
+ * `<body>::before`.  Speed difference between the two layers
+ * (≈ 2x) reads as depth.
+ *
+ * Each layer is one viewport-sized tile of pseudo-random dot
+ * positions repeated vertically; transform translates exactly
+ * one tile (100vh) so the loop seams without paint.
+ *
+ * Tweak by:
+ *   - Number of `radial-gradient(...)` entries: more = denser snow.
+ *   - alpha (0.55 / 0.85 in the example): higher = more visible.
+ *   - Animation duration (26s / 14s): shorter = faster fall.
+ *   - Color (255,255,255 = white): match your palette for petals/etc.
+ * ────────────────────────────────────────────────────────────── */
+
+/*
+:root[data-theme="__YOUR_ID__"][data-view="home"]::before {
+  content: "";
+  position: fixed;
+  top: -100vh; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 9997;
+  background-image:
+    radial-gradient(1px 1px at  3%  4%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 19%  6%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 36% 10%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 52%  8%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 68% 14%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 84%  9%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 17% 50%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 47% 58%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 78% 66%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 41% 86%, rgba(255,255,255,0.55) 100%, transparent 100%);
+  background-size: 100% 100vh;
+  background-repeat: repeat-y;
+  animation: __YOUR_ID__-particle-far 26s linear infinite;
+  will-change: transform;
+}
+
+:root[data-theme="__YOUR_ID__"][data-view="home"] body::before {
+  content: "";
+  position: fixed;
+  top: -100vh; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+  z-index: 9998;
+  background-image:
+    radial-gradient(2px 2px at  8%  3%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 38%  7%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 66%  5%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 12% 32%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 44% 36%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 73% 41%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 33% 71%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 56% 78%, rgba(255,255,255,0.85) 100%, transparent 100%);
+  background-size: 100% 100vh;
+  background-repeat: repeat-y;
+  animation: __YOUR_ID__-particle-near 14s linear infinite;
+  will-change: transform;
+}
+
+@keyframes __YOUR_ID__-particle-far {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, 100vh, 0); }
+}
+
+@keyframes __YOUR_ID__-particle-near {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, 100vh, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="__YOUR_ID__"][data-view="home"]::before,
+  :root[data-theme="__YOUR_ID__"][data-view="home"] body::before {
+    animation: none;
+  }
+}
+*/
+
+
+/* ──────────────────────────────────────────────────────────────
+ * EXAMPLE 3 — Component-level override (hexagonal chip outlines,
+ * scanline-only borders, etc.).
+ *
+ * Sometimes a theme wants to override a single component's look
+ * beyond what palette swaps can express.  Any selector prefixed
+ * with `:root[data-theme="__YOUR_ID__"]` works — and the override
+ * is automatically withdrawn when the user picks a different
+ * theme.  Add `[data-view="home"]` if the override is decorative
+ * (purely visual flair); leave it off if the override is a
+ * functional fix (e.g. correcting contrast on a third-party
+ * widget).
+ *
+ * Examples:
+ *   :root[data-theme="__YOUR_ID__"] .cat-chip {
+ *     clip-path: polygon(...);   ← hexagonal chip
+ *   }
+ *   :root[data-theme="__YOUR_ID__"] .dialog {
+ *     border-radius: 0;          ← square dialogs
+ *   }
+ *
+ * Use sparingly — if a theme needs to override too many
+ * components it usually means the palette is fighting the design.
+ * ────────────────────────────────────────────────────────────── */

@@ -1,0 +1,50 @@
+﻿[
+    {
+        "Name":  "{3F14BE98-98EC-484B-A2BC-F0DAA0E8E7FA}",
+        "DisplayName":  "Node.js JavaScript Runtime",
+        "Profile":  "Public",
+        "Program":  "C:\\program files\\nodejs\\node.exe"
+    },
+    {
+        "Name":  "{70956C2E-A68D-44A6-A2EF-7F8A140C4981}",
+        "DisplayName":  "Node.js JavaScript Runtime",
+        "Profile":  "Public",
+        "Program":  "C:\\program files\\nodejs\\node.exe"
+    },
+    {
+        "Name":  "{FEC5A9B0-73D2-4B99-A6F1-EB927D29167B}",
+        "DisplayName":  "Node.js JavaScript Runtime",
+        "Profile":  "Public",
+        "Program":  "B:\\playerbuild\\chiral network channel\\runtime\\node.exe"
+    },
+    {
+        "Name":  "{57E6491D-F2E7-466C-9B94-8DF5BFBCA44D}",
+        "DisplayName":  "Node.js JavaScript Runtime",
+        "Profile":  "Public",
+        "Program":  "B:\\playerbuild\\chiral network channel\\runtime\\node.exe"
+    },
+    {
+        "Name":  "{DFE54F62-F93E-4000-8359-A984E39A3297}",
+        "DisplayName":  "Node.js JavaScript Runtime",
+        "Profile":  "Public",
+        "Program":  "B:\\ds124network\\runtime\\node.exe"
+    },
+    {
+        "Name":  "{CD901679-8A41-4BD5-B825-93B22526182B}",
+        "DisplayName":  "Node.js JavaScript Runtime",
+        "Profile":  "Public",
+        "Program":  "B:\\ds124network\\runtime\\node.exe"
+    },
+    {
+        "Name":  "{CADBAEF6-5000-4197-B123-52249AF8199B}",
+        "DisplayName":  "Node.js JavaScript Runtime",
+        "Profile":  "Public",
+        "Program":  "B:\\ds124deploytest\\chiral network channel\\runtime\\node.exe"
+    },
+    {
+        "Name":  "{7E4AD6E1-5BC8-4BFE-93C7-487F2797FDE1}",
+        "DisplayName":  "Node.js JavaScript Runtime",
+        "Profile":  "Public",
+        "Program":  "B:\\ds124deploytest\\chiral network channel\\runtime\\node.exe"
+    }
+]

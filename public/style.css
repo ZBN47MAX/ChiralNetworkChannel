@@ -1,0 +1,6728 @@
+/* ==========================================================================
+   Chiral Network Channel — main stylesheet.
+
+   Theme color palettes have been hoisted out to `style/<id>.css` so
+   that adding a theme is a pure file-creation operation. Each
+   `style/<id>.css` is loaded via its own `<link>` in `index.html` and
+   activated by setting `data-theme="<id>"` on `<html>` (driven by
+   `applyTheme()` in `app.js`, restored from `ds124:theme` LS).
+
+   See `style/dark.css` for the variable contract every theme file
+   must satisfy.
+
+   This file owns layout / typography / component visuals only and
+   consumes the variables those theme files supply. A handful of
+   `:root[data-theme="light"] .selector { color: #xxx }` overrides
+   still live inline below — those are layout-specific tweaks that
+   have not yet been hoisted to fresh variables; tracked as the 1.7.x
+   "theme template purification" cleanup.
+   ========================================================================== */
+
+/**
+ * @brief Font stacks shared by all themes.
+ *
+ * Themes only override color tokens. Typography (body + monospace
+ * stacks) is theme-invariant and lives here so a new `style/<id>.css`
+ * file does not have to re-declare it.
+ */
+:root {
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter",
+               Roboto, "Helvetica Neue", "Microsoft YaHei", "PingFang SC",
+               sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "SF Mono", "Cascadia Mono",
+               "Menlo", "Consolas", "Microsoft YaHei Mono", monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body { display: flex; flex-direction: column; }
+
+[hidden] { display: none !important; }
+
+.mono { font-family: var(--font-mono); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+/* ==========================================================================
+   Header
+   ========================================================================== */
+header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-strong);
+  user-select: none;
+  gap: 18px;
+  position: relative;
+  z-index: 10;
+}
+header::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -1px;
+  height: 1px;
+  background: linear-gradient(
+    to right, transparent 0%, var(--accent-dim) 20%,
+    var(--accent-dim) 80%, transparent 100%
+  );
+  opacity: 0.6;
+  pointer-events: none;
+}
+:root[data-theme="light"] header::after { display: none; }
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+header h1 {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+header h1::before {
+  content: "// ";
+  color: var(--accent);
+  font-weight: 400;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
+#count, #status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+#status:not(:empty) + #count { display: none; }
+
+.user-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 1px;
+  height: 28px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.user-pill:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.user-pill:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 1px;
+}
+.user-pill #user-name { color: var(--text); }
+.user-pill .user-pill-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-dim);
+}
+.user-pill .user-pill-caret svg { width: 14px; height: 14px; }
+.user-pill[aria-expanded="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.icon-btn {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
+  padding: 0 12px;
+  height: 28px;
+  border-radius: 1px;
+  cursor: pointer;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.icon-btn:active { background: var(--hover); }
+.icon-btn[disabled] { opacity: 0.35; cursor: not-allowed; pointer-events: none; }
+.icon-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.icon-btn:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/**
+ * @brief Manual subtitle picker dialog.
+ *
+ * Dialog body is the standard `.dialog` shell; only the inner list
+ * + per-row chrome are themed here. Rows are flat buttons grouped
+ * by parent directory so users can scan large collections (many
+ * Season-X subfolders) at a glance. Active state highlights the
+ * currently-attached manual subtitle so re-opening the dialog
+ * surfaces the existing pick clearly.
+ */
+/**
+ * @brief Subtitle font-size slider row inside the manual picker.
+ *
+ * Slider drives `--sub-scale` live. The numeric readout updates as
+ * the user drags so they can dial in an exact factor; the reset
+ * button snaps back to 1.0x.
+ */
+.manual-subtitle-scale-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.manual-subtitle-scale-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+.manual-subtitle-scale-row input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 100px;
+  accent-color: var(--accent);
+}
+.manual-subtitle-scale-row output {
+  flex: 0 0 50px;
+  font-size: 12px;
+  color: var(--text);
+  text-align: right;
+}
+.manual-subtitle-scale-row .icon-btn {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.manual-subtitle-list {
+  max-height: 50vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 8px 0 12px;
+}
+.manual-subtitle-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 14px;
+  border: 1px dashed var(--border);
+  text-align: center;
+}
+.manual-subtitle-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.manual-subtitle-group-head {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+  padding: 0 4px;
+}
+.manual-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+  width: 100%;
+}
+.manual-sub-row:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.manual-sub-row.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+.manual-sub-row.active::before {
+  content: "● ";
+  color: var(--accent);
+  margin-right: 2px;
+}
+.manual-sub-file {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.manual-sub-lang,
+.manual-sub-fmt {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+/**
+ * @brief Header dropdowns (theme + language).
+ *
+ * Replaces the 1.6.x .theme-toggle button. Adding a new theme /
+ * locale is just an `<option>` + dictionary entry — no special-case
+ * CSS like the old dot.d/dot.l indicator dance.
+ *
+ * Style intentionally matches header icon-btn dimensions so the
+ * controls line up flush. The native `<select>` arrow is replaced
+ * with two stacked CSS gradients drawn into the right-side padding,
+ * giving every theme a guaranteed pixel-snapped chevron in the
+ * --text-dim color regardless of OS / browser default skinning.
+ *
+ * Layout: each `<select>` is wrapped in `.header-select-wrap` so an
+ * inline SVG prefix icon (palette / globe) can float over the
+ * select's left padding without intercepting clicks. The wrapper
+ * is `display: inline-block; position: relative` and the prefix is
+ * `position: absolute; pointer-events: none` so the select still
+ * captures every interaction.
+ */
+.header-select {
+  height: 28px;
+  padding: 0 22px 0 10px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 1px;
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+                    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position: calc(100% - 12px) 12px, calc(100% - 7px) 12px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  transition: border-color 0.2s, background-color 0.2s;
+}
+.header-select:hover { border-color: var(--accent); }
+.header-select:focus-visible { outline: 1px solid var(--focus); outline-offset: 1px; }
+.header-select option { background: var(--surface); color: var(--text); }
+
+/**
+ * @brief Wrapper that pairs a prefix icon with a `<select>`.
+ *
+ * Inline-block keeps the wrapper from stretching past the select's
+ * intrinsic width; `position: relative` anchors the absolutely-
+ * positioned prefix.
+ */
+.header-select-wrap {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+}
+
+/**
+ * @brief Inline-SVG prefix overlay (palette / globe / etc.).
+ *
+ * Pinned to the select's left padding, vertically centered, with
+ * `pointer-events: none` so the underlying select still owns every
+ * click / focus. Uses `currentColor` so a single rule cascades from
+ * `--text-dim` into the SVG strokes/fills, and follows
+ * `--accent` on hover — no per-theme override needed.
+ */
+.header-select-prefix {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--text-dim);
+  transition: color 0.2s;
+  z-index: 1;
+}
+.header-select-wrap:hover .header-select-prefix,
+.header-select-wrap:focus-within .header-select-prefix {
+  color: var(--accent);
+}
+
+/**
+ * @brief `<select>` variant with a prefix icon — extra left padding.
+ *
+ * Reserves 28px on the left = 8px gap + 14px icon + 6px breathing
+ * room before the option label. Used together with
+ * `.header-select-wrap` + `.header-select-prefix`.
+ */
+.header-select-with-icon {
+  padding-left: 28px;
+}
+
+/* ==========================================================================
+   Layout
+   ========================================================================== */
+main {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  position: relative;
+}
+.view {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+#view-home    { display: block; overflow-y: auto; }
+#view-detail  { display: block; overflow-y: auto; position: relative; }
+#view-history { display: block; overflow-y: auto; }
+#view-admin   { display: block; overflow-y: auto; }
+#view-login   { display: flex; align-items: center; justify-content: center; }
+#view-gallery { display: block; overflow-y: auto; }
+#view-novel-reader { display: flex; flex-direction: column; min-height: 0; }
+
+.filter-spacer { flex: 1 1 auto; min-width: 10px; }
+
+/* Panel helper class — apply a hard wireframe frame. */
+.panel-frame {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  position: relative;
+}
+/* L-bracket corner decorations (top-left + bottom-right). */
+.panel-frame::before,
+.panel-frame::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-color: var(--accent);
+  pointer-events: none;
+}
+.panel-frame::before {
+  top: -1px; left: -1px;
+  border-top: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
+}
+.panel-frame::after {
+  bottom: -1px; right: -1px;
+  border-bottom: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+}
+
+/* ==========================================================================
+   LOGIN
+   ========================================================================== */
+.login-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  padding: 40px 36px 32px;
+  position: relative;
+  box-shadow: var(--panel-shadow);
+}
+.login-card::before,
+.login-card::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+}
+.login-card::before {
+  top: -1px; left: -1px;
+  border-top: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
+}
+.login-card::after {
+  bottom: -1px; right: -1px;
+  border-bottom: 2px solid var(--accent);
+  border-right: 2px solid var(--accent);
+}
+
+.login-brand {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 2.5px;
+  color: var(--text);
+  margin-bottom: 28px;
+  text-align: center;
+}
+.login-notice {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: center;
+  margin-bottom: 18px;
+  padding: 8px;
+  border: 1px solid var(--accent-dim);
+}
+.login-tabs {
+  display: flex;
+  gap: 1px;
+  margin-bottom: 22px;
+  background: var(--border-strong);
+  border: 1px solid var(--border-strong);
+}
+.login-tabs button {
+  flex: 1;
+  background: var(--surface);
+  border: none;
+  color: var(--text-dim);
+  padding: 10px 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: color 0.2s, background 0.2s;
+}
+.login-tabs button:hover { color: var(--text); }
+.login-tabs button.active { background: var(--surface-2); color: var(--text); }
+
+.field { display: block; margin-bottom: 16px; }
+.field > span {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 1px;
+  outline: none;
+  font-size: 13px;
+  font-family: var(--font-body);
+  transition: border-color 0.2s;
+}
+/* Belt-and-braces: the rule above is meant for text inputs / selects /
+   textareas; radio + checkbox controls would get blown up to 100% wide
+   blocks with 10/12 padding (turning a 14px circle into a giant card)
+   without this override. Any new fieldset that contains radios is
+   covered automatically. */
+.field input[type="radio"],
+.field input[type="checkbox"] {
+  width: auto;
+  padding: 0;
+  margin: 0;
+}
+.field input:focus,
+.field textarea:focus,
+.field select:focus { border-color: var(--accent); }
+.field textarea { resize: vertical; min-height: 60px; }
+.field.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.field.checkbox > span {
+  margin-bottom: 0;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-dim);
+  flex: 1;
+}
+.field.checkbox input { width: auto; }
+/* Fieldset-based radio group (e.g. resume mode on audio collections).
+   Match the visual weight of .field blocks. */
+.field-resume-mode {
+  border: 1px solid var(--border-strong);
+  padding: 10px 12px 8px;
+  margin-bottom: 14px;
+  background: var(--bg);
+}
+.field-resume-mode[hidden] { display: none; }
+.field-resume-mode legend {
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.field-resume-mode .radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 11px;
+  color: var(--text);
+  cursor: pointer;
+}
+.field-resume-mode .radio input { accent-color: var(--accent); width: auto; }
+
+/* Generic radio group block (e.g. bulk-authors mode picker). Same
+   visual frame as field-resume-mode / field-types so the dialog
+   reads as one cohesive form. The `.field input { width: 100% }`
+   rule above would otherwise stretch each radio button to full width
+   (turning a 14px circle into a giant box) and stack them weirdly —
+   the explicit `width: auto` here neutralises that. */
+.field-radio {
+  border: 1px solid var(--border-strong);
+  padding: 10px 12px 8px;
+  margin-bottom: 14px;
+  background: var(--bg);
+}
+.field-radio legend {
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.field-radio label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.field-radio input[type="radio"],
+.field-radio input[type="checkbox"] {
+  width: auto;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* Multi-tag picker — used in create / edit collection dialogs.
+   Same outer frame as .field-resume-mode for visual consistency. */
+.field-types {
+  border: 1px solid var(--border-strong);
+  padding: 10px 12px 8px;
+  margin-bottom: 14px;
+  background: var(--bg);
+}
+.field-types legend {
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.types-checkbox-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+}
+/* 1.5.0 capped this at max-height: 50vh + overflow-y: auto so a long
+   chip list wouldn't push the dialog buttons off-screen, but with the
+   default thin webkit scrollbar users couldn't tell the bottom rows
+   were scrolled out of view — looked exactly like "子标签消失". 1.5.2
+   reverts the cap; if a kind ever has so many chips that the dialog
+   overflows the viewport we'll need a sticky-footer rework instead. */
+/* Hierarchy: child chips visually nested under parent. Width-locked block
+   so the indent is preserved no matter the wrap. */
+.type-chip-cb[data-depth="1"] { margin-left: 18px; }
+.type-chip-cb[data-depth="2"] { margin-left: 36px; }
+.type-chip-cb[data-depth="3"] { margin-left: 54px; }
+.type-chip-cb[data-depth="4"] { margin-left: 72px; }
+.type-chip-indent {
+  margin-right: 4px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  user-select: none;
+}
+/* Parent-path prefix on ambiguous (same-label) child chips. 1.5.0:
+   upgraded from a fade-only treatment to a proper badge so admins
+   can tell apart two "萝莉" chips at a glance — the prior 0.7 opacity
+   was too easy to miss when scanning a long chip wall. */
+.type-chip-parent {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-right: 4px;
+  background: var(--hover);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-size: 0.85em;
+  font-family: var(--font-mono);
+  letter-spacing: 0.2px;
+  vertical-align: 1px;
+}
+/* Subtle child-count suffix on parent chips. Plain text, faded; just
+   enough signal that "this chip has 12 children below it" without
+   competing visually with the chip's own label. */
+.type-chip-count {
+  margin-left: 4px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  opacity: 0.75;
+}
+#edit-auto-detect-btn {
+  display: block;
+  margin-top: 10px;
+  font-size: 10px;
+  padding: 5px 12px;
+}
+
+/* Author chip input (1.2.0+). Same visual language as keywords chip. */
+.field-authors {
+  border: 1px solid var(--border-strong);
+  padding: 10px 12px 8px;
+  margin-bottom: 14px;
+  background: var(--bg);
+}
+.field-authors legend {
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.authors-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+  min-height: 4px;
+}
+.author-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.author-chip button {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+}
+.author-chip button:hover { color: var(--danger, #ff5c5c); }
+.author-input {
+  width: 100%;
+  font-size: 11px;
+  padding: 5px 8px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-family: inherit;
+  margin-top: 6px;
+}
+.detail-authors {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 4px 0 8px;
+  letter-spacing: 0.04em;
+}
+
+/* Search page (1.2.0+) */
+.search-wrap-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 44px 44px 60px;
+}
+.search-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+.search-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+#search-page-input {
+  flex: 1 1 auto;
+  font-size: 14px;
+  padding: 10px 14px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-family: inherit;
+}
+#search-page-submit { padding: 10px 24px; }
+.search-fields, .search-kinds, .search-extras {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  font-size: 12px;
+}
+.search-extras label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  color: var(--accent);
+}
+.search-fields label, .search-kinds label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.search-fields-label {
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+.search-status {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.04em;
+}
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/**
+ * @brief Search hit container. Wraps a clickable collection-level
+ *        link + an optional list of per-episode jumplinks.
+ *
+ * Card itself is a non-link <div> because HTML disallows nested
+ * anchors and we want each per-episode link below to be its own
+ * <a href>. The collection-level click target is the inner
+ * `.search-card-link` <a>; the surrounding card is just for
+ * visual grouping + hover state.
+ */
+.search-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  transition: border-color 0.1s, background 0.1s;
+}
+.search-card:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+.search-card-link {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+}
+.search-card-kind {
+  flex: 0 0 60px;
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 0.08em;
+}
+.search-card-body { flex: 1 1 auto; min-width: 0; }
+.search-card-title { font-size: 14px; font-weight: 500; }
+.search-card-meta { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+/**
+ * @brief Per-episode jumplink list inside a search card.
+ *
+ * Rendered only when the search hit carries a non-empty
+ * _matchedEpisodes payload (i.e. user opted into the "episodes"
+ * field and at least one episode contained every search term).
+ * Each pill is a direct link to the episode's player URL.
+ */
+.search-card-episodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-left: 72px;  /* align with .search-card-body (kind 60px + gap 12px) */
+}
+.search-card-ep {
+  font-size: 11px;
+  padding: 4px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  text-decoration: none;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: border-color 0.1s, color 0.1s;
+}
+.search-card-ep:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+@media (max-width: 600px) {
+  .search-wrap-page { padding: 20px 14px 40px; }
+  .search-controls { padding: 14px; gap: 12px; }
+  .search-card-kind { flex-basis: 50px; font-size: 9px; }
+  .search-card-title { font-size: 12px; }
+  .search-card-episodes { padding-left: 0; }
+}
+.type-chip-cb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+}
+.type-chip-cb:hover { border-color: var(--accent); }
+.type-chip-cb input { accent-color: var(--accent); width: auto; margin: 0; }
+.type-chip-cb input:checked + span { color: var(--accent); }
+.type-chip-cb:has(input:checked) { border-color: var(--accent); }
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 11px 14px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: 1px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+.btn-primary:hover { background: var(--accent); color: var(--bg); }
+.btn-primary:active { background: var(--accent-dim); border-color: var(--accent-dim); color: var(--bg); }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 11px 24px;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
+  border-radius: 1px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+}
+.btn-secondary:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.login-error {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--danger);
+  letter-spacing: 0.5px;
+  text-align: center;
+  min-height: 14px;
+  margin-top: 12px;
+}
+.login-footer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 9px;
+  color: var(--text-faint);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   HOME
+   ========================================================================== */
+.home-row {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 28px 44px 0;
+}
+.home-row .section-label {
+  margin-bottom: 14px;
+}
+.row-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+}
+.row-scroll::-webkit-scrollbar { height: 6px; }
+.row-scroll::-webkit-scrollbar-track { background: transparent; }
+.row-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 1px; }
+.row-scroll::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+
+.mini-card {
+  flex: 0 0 220px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition: border-left-color 0.2s, background 0.2s;
+  overflow: hidden;
+}
+.mini-card:hover {
+  background: var(--hover);
+  border-left-color: var(--accent);
+}
+.mini-card-cover {
+  position: relative;
+  aspect-ratio: 16/10;
+  background-color: var(--bg);
+  border-bottom: 1px solid var(--border-strong);
+  overflow: hidden;
+}
+.mini-card-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--cover-url, none);
+  background-size: cover;
+  background-position: var(--cover-x, 50%) var(--cover-y, 50%);
+  transform: scale(var(--cover-scale, 1));
+  transform-origin: var(--cover-x, 50%) var(--cover-y, 50%);
+  pointer-events: none;
+}
+.mini-card-meta {
+  padding: 10px 12px;
+  min-width: 0;
+}
+.mini-card-title {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 3px;
+}
+.mini-card-ep {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+.mini-card-bar {
+  width: 100%;
+  height: 2px;
+  background: var(--border-strong);
+  overflow: hidden;
+}
+.mini-card-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.home-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 28px 44px 10px;
+  max-width: 1440px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+  /* Sticky so the filter chips + search + 批量管理 trigger stay
+     reachable as the user scrolls through hundreds of cards. Scroll
+     happens inside #view-home (overflow-y:auto), so top:0 anchors
+     under the page header. z-index sits above cards but below dialogs. */
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+}
+
+/* Mobile toolbar pill — default hidden on desktop. The mobile media
+   query below shows it and collapses the rest of the toolbar behind
+   it; tapping the pill toggles .home-toolbar.expanded. */
+.toolbar-mobile-bar { display: none; }
+.toolbar-summary {
+  /* base styles — the actual visual treatment lives inside the mobile
+     query below since this element is mobile-only. Keeps button reset
+     consistent across browsers though. */
+  border: none;
+  background: none;
+  margin: 0;
+  font: inherit;
+}
+.filter-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 1px;
+  background: var(--border-strong);
+  border: 1px solid var(--border-strong);
+  overflow-x: auto;
+  overflow-y: hidden;
+  position: relative;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-dim, var(--border-strong)) transparent;
+}
+.filter-chips::-webkit-scrollbar { height: 5px; }
+.filter-chips::-webkit-scrollbar-thumb {
+  background: var(--accent-dim, var(--border-strong));
+}
+.filter-chips::-webkit-scrollbar-track { background: transparent; }
+/* Filter sub-stack — full-width column docked below the chip strip.
+   `flex: 1 0 100%; order: 99` forces this onto its own line at the
+   bottom of the .home-toolbar flex (which has flex-wrap:wrap), so it
+   never competes with chips/sort/search for horizontal space. Inside
+   the stack, each sub-row + its toggle button sit in a column with
+   small gap, giving the chip area its own quiet visual block below
+   the toolbar. */
+.filter-substack {
+  flex: 1 0 100%;
+  order: 99;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+.filter-substack[hidden] { display: none; }
+
+/* Active-tag pinned bar — sits ABOVE #filter-chips on its own line via
+   `flex: 1 0 100%; order: -1` (the toolbar is `flex-wrap: wrap`, so
+   100% basis forces a new row, and order:-1 puts it first regardless
+   of DOM position). Each chip shows the full path label (root /…/leaf)
+   and an × to remove that single tag from selection. Hidden when no
+   tag is selected. */
+.filter-active-tags {
+  flex: 1 0 100%;
+  order: -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 2px;
+  margin-bottom: 2px;
+  border-bottom: 1px dashed var(--border);
+}
+.filter-active-tags[hidden] { display: none; }
+.active-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 6px 3px 10px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  max-width: 100%;
+}
+.active-tag-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+.active-tag-x {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+}
+.active-tag-x:hover { color: var(--text); }
+@media (max-width: 600px) {
+  .filter-active-tags { gap: 4px; padding: 3px 0 2px; }
+  .active-tag-chip { padding: 2px 5px 2px 8px; font-size: 9px; }
+  .active-tag-label { max-width: 200px; }
+}
+
+/* Operator switcher (OR / AND / NOT / NOR) for multi-tag chip
+   filtering. Same chip-bar visual language so it slots next to
+   .filter-chips without looking foreign. Hidden by default — shown
+   only when ≥1 tag is selected (driven by syncFilterOpUI in app.js). */
+.filter-op {
+  display: flex;
+  gap: 1px;
+  background: var(--border-strong);
+  border: 1px solid var(--border-strong);
+  margin-left: 8px;
+  overflow: hidden;
+}
+.filter-op[hidden] { display: none; }
+.filter-op button {
+  background: var(--surface);
+  border: none;
+  color: var(--text-dim);
+  padding: 8px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  min-width: 38px;
+}
+.filter-op button:hover { color: var(--accent); }
+.filter-op button.active {
+  background: var(--accent);
+  color: var(--bg);
+}
+.filter-chips button {
+  background: var(--surface);
+  border: none;
+  color: var(--text-dim);
+  padding: 8px 16px;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: color 0.2s, background 0.2s;
+}
+.filter-chips button:hover { color: var(--text); background: var(--surface-2); }
+.filter-chips button.active { background: var(--surface-2); color: var(--accent); }
+
+/* Sub-chip rows — depth-1 (data-depth="1") and depth-2 (data-depth="2"),
+   nested inside #filter-substack. Each row scrolls horizontally with a
+   thin scrollbar. Left-border stripe ties the row visually to the chip
+   strip above; depth-2 inherits a slightly larger inset + thicker
+   stripe so the nesting reads at a glance. Buttons get flex-shrink:0
+   to prevent the long-tag-list squashing case. */
+.filter-sub-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--surface);
+  border-left: 2px solid var(--accent);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-dim, var(--border-strong)) transparent;
+}
+.filter-sub-row::-webkit-scrollbar { height: 4px; }
+.filter-sub-row::-webkit-scrollbar-thumb {
+  background: var(--accent-dim, var(--border-strong));
+}
+.filter-sub-row::-webkit-scrollbar-track { background: transparent; }
+.filter-sub-row[data-depth="2"] {
+  margin-left: 14px;
+  border-left-width: 3px;
+  background: var(--surface-2, var(--surface));
+}
+.filter-sub-row[data-depth="3"] {
+  margin-left: 28px;
+  border-left-width: 4px;
+  background: var(--surface-2, var(--surface));
+}
+.filter-sub-row[data-depth="4"] {
+  margin-left: 42px;
+  border-left-width: 5px;
+  background: var(--surface-2, var(--surface));
+}
+.filter-sub-row button {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  padding: 4px 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.filter-sub-row button:hover { color: var(--text); background: var(--surface-2); }
+.filter-sub-row button.active { background: var(--surface-2); color: var(--accent); border-color: var(--accent); }
+
+/* Mobile breakpoint: tighter chips, smaller scrollbars. */
+@media (max-width: 600px) {
+  .filter-substack { gap: 3px; margin-top: 4px; }
+  .filter-sub-row { padding: 3px 6px; gap: 3px; }
+  .filter-sub-row[data-depth="2"] { margin-left: 8px; }
+  .filter-sub-row[data-depth="3"] { margin-left: 16px; }
+  .filter-sub-row[data-depth="4"] { margin-left: 24px; }
+  .filter-sub-row button { padding: 3px 7px; font-size: 9px; }
+  .filter-chips::-webkit-scrollbar { height: 3px; }
+  .filter-sub-row::-webkit-scrollbar { height: 3px; }
+}
+
+.fav-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.fav-toggle input { cursor: pointer; }
+
+.sort-select {
+  padding: 7px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 1px;
+  outline: none;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+.sort-select:focus { border-color: var(--accent); }
+
+.search-wrap {
+  flex: 0 1 320px;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.search-wrap > #search-input { flex: 1 1 auto; min-width: 0; }
+.search-wrap > .search-advanced-btn { flex: 0 0 auto; }
+.search-advanced-btn {
+  font-size: 9px;
+  padding: 0 10px;
+  height: 32px;
+  white-space: nowrap;
+  margin-left: 0 !important;
+  align-self: stretch;
+}
+#search-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  border-radius: 1px;
+  outline: none;
+  font-size: 12px;
+  font-family: var(--font-body);
+  transition: border-color 0.2s;
+}
+#search-input::placeholder {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+#search-input:focus { border-color: var(--accent); }
+
+#cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  padding: 24px 44px 60px;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+.cards-status {
+  grid-column: 1 / -1;
+  padding: 80px 20px;
+  text-align: center;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.cards-status.error { color: var(--danger); }
+
+.card {
+  position: relative;
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--border-strong);
+  padding: 28px 22px 22px;
+  cursor: pointer;
+  aspect-ratio: 16 / 10;
+  min-height: 170px;
+  display: flex;
+  align-items: flex-end;
+  transition: border-color 0.2s, background-color 0.2s, border-left-color 0.2s;
+  outline: none;
+  overflow: hidden;
+}
+.card:hover {
+  background-color: var(--hover);
+  border-color: var(--accent-dim);
+  border-left-color: var(--accent);
+}
+.card:focus-visible {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+  outline: 1px solid var(--focus);
+  outline-offset: 1px;
+}
+/* Image layer — painted first so the gradient scrim and card body
+   sit on top. Scale origin is the focal point so zooming in keeps the
+   admin-chosen point anchored. */
+.card-has-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--cover-url, none);
+  background-size: cover;
+  background-position: var(--cover-x, 50%) var(--cover-y, 50%);
+  transform: scale(var(--cover-scale, 1));
+  transform-origin: var(--cover-x, 50%) var(--cover-y, 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+/* Gradient scrim — painted after the image so card-name text stays
+   readable against bright cover art. */
+.card-has-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to top,
+    var(--scrim-deep) 0%, var(--scrim-mid) 35%,
+    var(--scrim-light) 65%, rgba(0, 0, 0, 0) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+.card-has-cover .card-name { color: #eaf2f8; }
+.card-has-cover .card-meta { color: #9eb3c0; }
+.card-has-cover .card-type { color: var(--accent); }
+:root[data-theme="light"] .card-has-cover .card-name { color: #000000; }
+:root[data-theme="light"] .card-has-cover .card-meta { color: #333333; }
+
+.card-fav-mark {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  z-index: 2;
+  color: var(--accent);
+  font-size: 16px;
+  text-shadow: 0 0 8px rgba(143, 181, 197, 0.5);
+}
+:root[data-theme="light"] .card-fav-mark { text-shadow: none; }
+
+.card-body {
+  width: 100%;
+  min-width: 0;
+  position: relative;
+  z-index: 1; /* above both ::before (image) and ::after (gradient) */
+}
+.card-type {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.card-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 8px;
+  word-break: break-word;
+  line-height: 1.35;
+  letter-spacing: 0.2px;
+}
+.card-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.card-watch { color: var(--accent); }
+
+.card-add {
+  border-style: dashed;
+  border-left-style: dashed;
+  border-color: var(--border-strong);
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.card-add:hover {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+}
+.card-add .card-body { text-align: center; }
+.card-plus {
+  font-size: 34px;
+  font-weight: 200;
+  color: var(--text-dim);
+  line-height: 1;
+  margin-bottom: 12px;
+  transition: color 0.2s;
+}
+.card-add:hover .card-plus { color: var(--accent); }
+.card-add .card-meta { justify-content: center; }
+
+/* Skeletons */
+.skeleton-card {
+  cursor: default;
+  pointer-events: none;
+  background-color: var(--surface);
+  background-image: linear-gradient(90deg,
+    transparent 0%, var(--hover) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite linear;
+}
+.skeleton-row {
+  list-style: none;
+  height: 60px;
+  margin-bottom: 1px;
+  background: var(--surface);
+  background-image: linear-gradient(90deg,
+    transparent 0%, var(--hover) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite linear;
+  border-bottom: 1px solid var(--border);
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ==========================================================================
+   DETAIL
+   ========================================================================== */
+.detail-scroll {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+}
+.detail-hero {
+  position: relative;
+  padding: 60px 44px 40px;
+  min-height: 340px;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+.detail-bg {
+  position: absolute;
+  inset: 0;
+  background-image: var(--cover-url, none);
+  background-size: cover;
+  background-position: var(--cover-x, 50%) var(--cover-y, 50%);
+  filter: blur(40px) brightness(0.5) saturate(0.8);
+  transform: scale(1.1);
+  opacity: 0;
+  transition: opacity 0.4s;
+  z-index: 0;
+}
+.detail-hero.has-cover .detail-bg { opacity: 0.45; }
+:root[data-theme="light"] .detail-hero.has-cover .detail-bg { opacity: 0.12; filter: blur(30px) brightness(1.2) grayscale(1); }
+.detail-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(5, 8, 12, 0.2) 0%, rgba(5, 8, 12, 0.75) 60%, var(--bg) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+:root[data-theme="light"] .detail-hero::after {
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.3) 0%, rgba(255, 255, 255, 0.9) 60%, var(--bg) 100%
+  );
+}
+
+.detail-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  gap: 36px;
+  align-items: flex-start;
+}
+.detail-cover {
+  position: relative;
+  flex: 0 0 260px;
+  aspect-ratio: 2 / 3;
+  background-color: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--accent-dim);
+  overflow: hidden;
+}
+.detail-cover::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--cover-url, none);
+  background-size: cover;
+  background-position: var(--cover-x, 50%) var(--cover-y, 50%);
+  transform: scale(var(--cover-scale, 1));
+  transform-origin: var(--cover-x, 50%) var(--cover-y, 50%);
+  pointer-events: none;
+}
+.detail-hero.has-cover .detail-cover { border-left-color: var(--accent); }
+
+.detail-meta { flex: 1 1 auto; min-width: 0; padding-top: 12px; }
+.detail-type {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+.detail-title {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+  word-break: break-word;
+}
+.detail-stats {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 18px;
+}
+.detail-desc {
+  font-size: 13px;
+  color: var(--text-dim);
+  line-height: 1.7;
+  margin-bottom: 26px;
+  max-width: 640px;
+  white-space: pre-wrap;
+}
+.detail-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.detail-actions .btn-primary { width: auto; padding: 11px 28px; }
+
+.detail-episodes {
+  padding: 24px 44px 40px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+}
+
+/* =========================================================
+   Detail-page tab bar: toggles between EPISODES (legacy flat
+   list with dir group headers) and FILE STRUCTURE (the new
+   interactive collapsible tree). Styled to match the cold-HUD
+   section labels used elsewhere in the project.
+   ========================================================= */
+.detail-tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.detail-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 10px 18px 8px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.detail-tab:hover { color: var(--text); }
+.detail-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.detail-tab-panel[hidden] { display: none; }
+
+/* File tree (the FILE STRUCTURE tab). Collapsible nested
+   structure with per-row icon, label, meta. Click handlers
+   are attached in app.js renderTreeNodes. */
+#file-tree {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+}
+#file-tree ul.tree-children {
+  list-style: none;
+  padding-left: 22px;
+  margin: 0;
+  border-left: 1px dashed rgba(255, 255, 255, 0.08);
+}
+#file-tree li.tree-node { list-style: none; margin: 0; }
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.1s;
+}
+.tree-row:hover { background: var(--hover); }
+.tree-node-dir > .tree-row { color: var(--text); }
+.tree-node-media > .tree-row .tree-icon,
+.tree-node-image > .tree-row .tree-icon { color: var(--accent); }
+.tree-node-other > .tree-row { cursor: default; color: var(--text-dim); }
+.tree-node-other > .tree-row:hover { background: transparent; }
+.tree-chevron {
+  width: 14px;
+  color: var(--accent-dim);
+  font-size: 9px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.tree-icon {
+  width: 14px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 11px;
+}
+.tree-label {
+  flex: 1;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-meta {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* =========================================================
+   Image preview lightbox used by the file-tree image nodes.
+   Click anywhere or press ESC to dismiss (handled in JS).
+   ========================================================= */
+.img-preview {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 4, 8, 0.92);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  cursor: zoom-out;
+}
+.img-preview[hidden] { display: none; }
+.img-preview img {
+  max-width: 100%;
+  max-height: calc(100vh - 120px);
+  object-fit: contain;
+  border: 1px solid var(--border);
+  background: #000;
+}
+.img-preview #img-preview-caption {
+  margin-top: 14px;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  max-width: 80%;
+  text-align: center;
+  word-break: break-all;
+}
+
+/* =========================================================
+   Home-page bulk collection management. Cards get a checkbox
+   overlay when state.bulkColMode is on; a sticky bottom bar
+   shows the selection count and three action buttons.
+   ========================================================= */
+.card.bulk-mode { cursor: pointer; }
+.card.bulk-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.card-bulk-check {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+  background: rgba(5, 8, 12, 0.85);
+  border: 1px solid var(--accent-dim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+}
+.card-bulk-check svg { width: 16px; height: 16px; }
+
+.bulk-col-bar {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(5, 8, 12, 0.95);
+  border: 1px solid var(--accent-dim);
+  padding: 14px 22px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  z-index: 100;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6);
+}
+.bulk-col-bar[hidden] { display: none; }
+.bulk-col-bar-info {
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.bulk-col-bar-info span {
+  color: var(--text);
+  font-size: 14px;
+  margin: 0 4px;
+}
+.bulk-col-bar-actions {
+  display: flex;
+  gap: 10px;
+}
+.bulk-col-bar-actions button {
+  min-width: 80px;
+}
+#home-bulk-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+#episode-list, #player-episode-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+}
+#episode-list.gallery-grid {
+  display: grid;
+  border: none;
+}
+
+.ep-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 13px 14px;
+  border-left: 2px solid transparent;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s, border-left-color 0.15s;
+  position: relative;
+  background: var(--surface);
+}
+.ep-row:last-child { border-bottom: none; }
+.ep-row:hover { background: var(--hover); border-left-color: var(--accent-dim); }
+.ep-row.active { background: var(--active); border-left-color: var(--accent); }
+.ep-row.done .ep-title { color: var(--text-dim); }
+.ep-row.dragging { opacity: 0.5; }
+
+.ep-index {
+  flex: 0 0 32px;
+  font-size: 13px;
+  color: var(--text-dim);
+  padding-top: 1px;
+}
+.ep-row.active .ep-index { color: var(--accent); }
+/* Per-track embedded cover thumbnail (audio kind only). Rendered as a
+   plain div with background-image so 404 responses from the cover
+   endpoint degrade silently — no broken-image icon, just a blank cell
+   the same color as the surrounding surface. */
+.ep-cover {
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  background-color: var(--bg);
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--border-strong);
+  align-self: center;
+  border-radius: 1px;
+}
+
+.ep-body { flex: 1 1 auto; min-width: 0; }
+.ep-title {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+.ep-meta {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+.ep-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.ep-progress {
+  margin-top: 6px;
+  width: 100%;
+  height: 2px;
+  background: var(--border-strong);
+  overflow: hidden;
+}
+.ep-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.ep-sub-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  font-size: 9px;
+  letter-spacing: 1px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border-radius: 1px;
+}
+/* Inline warning that this episode's container is known-unplayable in
+   browsers (AVI/WMV/FLV/RMVB/RM). Clicking it still opens the player,
+   but the player will immediately show the error overlay with a
+   download button. The badge exists so users see the situation before
+   committing to a click. */
+.ep-download-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid var(--warning, #d48a3e);
+  color: var(--warning, #d48a3e);
+  font-size: 9px;
+  letter-spacing: 1px;
+  margin-left: 6px;
+  vertical-align: middle;
+  border-radius: 1px;
+}
+.ep-edit-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  align-self: center;
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s;
+}
+.ep-row:hover .ep-edit-btn { opacity: 1; }
+.ep-edit-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+.ep-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Directory group header inserted into the episode list when episodes
+   span multiple folders (tree-view feature). Sticks out from regular
+   rows by being non-interactive, using mono font, and indenting a
+   depth marker on the left based on how deep the subfolder is. */
+.ep-group-header {
+  padding: 14px 16px 6px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  pointer-events: none;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+  margin-top: 4px;
+}
+.ep-group-header:first-child { border-top: none; margin-top: 0; }
+.ep-group-header .ep-group-path {
+  color: var(--accent-dim);
+  word-break: break-all;
+}
+.ep-row.nested {
+  padding-left: 28px;
+}
+.ep-row.nested .ep-index {
+  color: var(--text-dim);
+}
+
+/* Drag-drop hover effect on detail view */
+#view-detail.drag-hover::before {
+  content: "松手上传到当前合集";
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 12, 0.85);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  border: 2px dashed var(--accent);
+  pointer-events: none;
+}
+:root[data-theme="light"] #view-detail.drag-hover::before {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+/* Comments */
+.detail-comments {
+  padding: 24px 44px 60px;
+}
+#comment-compose {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  padding: 16px;
+  margin-bottom: 20px;
+}
+#comment-text {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  color: var(--text);
+  padding: 10px 12px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  outline: none;
+  resize: vertical;
+  min-height: 60px;
+  border-radius: 1px;
+}
+#comment-text:focus { border-color: var(--accent); }
+.comment-compose-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 10px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.comment-compose-actions .btn-primary { width: auto; padding: 9px 22px; }
+.comment-error {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--danger);
+  letter-spacing: 0.5px;
+}
+#comment-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.comment-row {
+  padding: 13px 15px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--accent-dim);
+}
+.comment-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.comment-user {
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.comment-time {
+  font-size: 10px;
+  color: var(--text-faint);
+  margin-left: auto;
+}
+.comment-del {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  padding: 2px 8px;
+  font-size: 9px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 1px;
+  margin-left: 6px;
+}
+.comment-del:hover { color: var(--danger); border-color: var(--danger); }
+.comment-text {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.comment-empty {
+  list-style: none;
+  padding: 40px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* ==========================================================================
+   GLOBAL VIDEO PORTAL
+   ========================================================================== */
+#video-portal {
+  display: none;
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+#video-portal video {
+  width: 100%;
+  height: 100%;
+  background: #000;
+  display: block;
+  object-fit: contain;
+}
+
+/* Error overlay — absolutely positioned inside #video-portal so it sits
+   directly on top of the <video> element. Driven by the player error
+   event listener and by pre-emptive checks on known-unplayable extensions. */
+#player-error-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 8, 12, 0.94);
+  pointer-events: auto;
+}
+#player-error-overlay[hidden] { display: none; }
+
+/**
+ * Audio-remux loading overlay (1.7.39). Same shell shape as the
+ * error overlay (centered card on a dim backdrop), but with a
+ * spinning indicator + progress text instead of a download CTA.
+ * Lives in #video-portal so it tracks the video element through
+ * mini-player / fullscreen transitions.
+ */
+#player-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 8, 12, 0.94);
+  pointer-events: auto;
+}
+#player-loading-overlay[hidden] { display: none; }
+.player-loading-inner {
+  max-width: 360px;
+  text-align: center;
+  border: 1px solid var(--accent-dim);
+  background: var(--surface);
+  padding: 24px 20px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.player-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--accent-dim);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: player-loading-spin 0.8s linear infinite;
+}
+@keyframes player-loading-spin {
+  to { transform: rotate(360deg); }
+}
+.player-loading-msg {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+.player-loading-progress {
+  font-size: 18px;
+  letter-spacing: 1px;
+  color: var(--text);
+  min-height: 22px;
+}
+.player-loading-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  word-break: break-word;
+}
+:root[data-theme="light"] #player-loading-overlay {
+  background: rgba(240, 242, 245, 0.96);
+}
+.player-error-inner {
+  max-width: 480px;
+  text-align: center;
+  border: 1px solid var(--accent-dim);
+  background: var(--surface);
+  padding: 28px 24px;
+}
+.player-error-title {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+.player-error-msg {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.65;
+  margin-bottom: 22px;
+  word-break: break-word;
+}
+.player-error-btn {
+  display: inline-block;
+  text-decoration: none;
+}
+:root[data-theme="light"] #player-error-overlay {
+  background: rgba(240, 242, 245, 0.96);
+}
+
+/* Plyr overrides: force the player to fill its container exactly.
+   Plyr's default aspect-ratio: 16/9 on .plyr__video-wrapper makes the
+   wrapper overflow its host when the host's width × 9/16 > host height,
+   which clips the control bar. We force 100% height and let object-fit
+   handle aspect ratio on the video itself. */
+#video-portal .plyr {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+}
+#video-portal .plyr--video {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  display: block;
+}
+#video-portal .plyr__video-wrapper {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  max-height: 100%;
+  display: block;
+}
+#video-portal .plyr__video-wrapper video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/**
+ * Force the CC button to always render in the control bar.
+ *
+ * Plyr's stock rule is `.plyr [data-plyr=captions] { display: none }`
+ * with `.plyr--captions-enabled [data-plyr=captions] { display: inline-block }`
+ * — i.e. the captions button is hidden until at least one <track>
+ * element is detected. Per product requirement the button must be
+ * visible regardless: clicking it opens the manual-subtitle dialog,
+ * which itself handles the "no subtitle files in this collection"
+ * empty state with a clear message. The override targets the same
+ * specificity as Plyr's enabled-state rule and uses !important to
+ * win against the disabled-state rule (also using `display`).
+ *
+ * Mirror the same override inside #mini-player-slot so the mini
+ * player's CC button stays visible too.
+ */
+#video-portal .plyr [data-plyr=captions],
+#mini-player-slot .plyr [data-plyr=captions] {
+  display: inline-block !important;
+}
+
+/* 1.7.22 dropped the standalone .audio-track-menu / .audio-track-row
+ * popover — audio-track switching is now an item inside Plyr's own
+ * settings popup (peer of speed / captions / quality), and uses Plyr's
+ * built-in .plyr__control--forward / .plyr__control--back / role=
+ * menuitemradio styling. No project CSS needed. */
+
+/**
+ * Captions sub-panel scrolls when the row count exceeds 60vh —
+ * Invincible S03 mkvs ship 30 embedded SRT streams + 8 external srt
+ * sidecars (38 rows), and Plyr's settings popup has no max-height
+ * out of the box, so the popup grows past the video frame. Capping
+ * it at 60vh + scroll keeps the menu reachable on phones too.
+ *
+ * Plyr's main settings panels (.plyr__menu__container > div)
+ * already use a height transition for smooth panel swaps; setting
+ * max-height + overflow-y on our own panel id keeps that animation
+ * intact (we only constrain the inner panel, not the parent
+ * transition wrapper).
+ */
+#plyr-settings-captions-custom {
+  max-height: 60vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/**
+ * Make Plyr's settings popup fully visible + scrollable when our
+ * captions sub-panel exceeds the available height (1.7.33-34).
+ *
+ * Two clipping layers had to be cleared:
+ *
+ * 1. Plyr's own `.plyr__menu__container > div { overflow: hidden }`
+ *    on the panel-transition wrapper. Override to visible so our
+ *    panel's `overflow-y: auto` actually produces a scrollbar
+ *    instead of being cropped by the wrapper.
+ *
+ * 2. `#player-container { overflow: hidden }` (line ~2360) is the
+ *    bigger culprit on phones. The popup uses `position: absolute;
+ *    bottom: 100%` to grow upward from the controls bar. On a
+ *    portrait phone the video container is ~50vh tall, but the
+ *    popup with 38+ rows wants 60-70vh — its top spills above the
+ *    video container's top edge, and #player-container's overflow:
+ *    hidden chops everything above it. Plyr already adds
+ *    `.plyr--menu-open` to its root when the settings popup is
+ *    visible (overflow: visible self-applied), but that doesn't
+ *    propagate up to #player-container. Use :has() to forward the
+ *    state and let the popup spill above the video frame while the
+ *    menu is open. :has() is supported on Chrome/Edge/Safari 16+/
+ *    Firefox 121+ — the player target audience.
+ */
+.plyr__menu__container {
+  max-height: 70vh;
+}
+.plyr__menu__container > div {
+  max-height: 70vh;
+  overflow: visible;
+}
+#player-container:has(.plyr--menu-open),
+#player-container.ds-menu-open {
+  overflow: visible;
+}
+
+/**
+ * Mobile-friendly touch scrolling inside the captions sub-panel.
+ * Without explicit touch-action / -webkit-overflow-scrolling, some
+ * browsers' touch handling defers to ancestor scroll containers
+ * (here the page itself), preventing the user from scrolling the
+ * panel by drag. The pan-y hint tells the browser this element
+ * captures vertical scroll gestures.
+ */
+#plyr-settings-captions-custom {
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+}
+
+/**
+ * Mobile adaptation for the captions sub-panel (1.7.32 + 1.7.33).
+ * On ≤600px:
+ *   - settings popup widens so labels don't truncate at "Chinese Trad…"
+ *   - captions sub-panel max-height tightens to 55vh (system bars +
+ *     Plyr controls eat phone real estate)
+ *   - radio rows get bigger touch targets (10/14 padding, 13px font)
+ *   - long file names wrap instead of single-line truncate — common
+ *     for sidecar files like
+ *     "Invincible.(2021).S03E01.You're.Not.Laughing.Now.srt"
+ */
+@media (max-width: 600px) {
+  .plyr__menu__container {
+    min-width: 220px;
+    max-width: min(86vw, 360px);
+    max-height: 65vh;
+  }
+  .plyr__menu__container > div {
+    max-height: 65vh;
+  }
+  #plyr-settings-captions-custom {
+    max-height: 55vh;
+  }
+  #plyr-settings-captions-custom .plyr__control[role="menuitem"],
+  #plyr-settings-captions-custom .plyr__control[role="menuitemradio"] {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+  #plyr-settings-captions-custom .plyr__control > span {
+    white-space: normal;
+    word-break: break-word;
+  }
+}
+
+/* In mini mode, same rules apply so the player scales with the user-resized box */
+#mini-player-slot .plyr,
+#mini-player-slot .plyr--video,
+#mini-player-slot .plyr__video-wrapper {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  max-height: 100%;
+}
+#mini-player-slot .plyr__video-wrapper video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* ==========================================================================
+   PLAYER
+   ========================================================================== */
+#view-player { display: flex; }
+
+#player-sidebar {
+  flex: 0 0 320px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--border-strong);
+  min-width: 0;
+}
+.player-sidebar-head {
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--border-strong);
+}
+#player-sidebar-title {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#player-episode-list {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  padding: 6px 0 14px;
+  border: none;
+}
+
+#player-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg);
+  position: relative;
+}
+#player-container {
+  flex: 1 1 auto;
+  position: relative;
+  background: #000;
+  min-height: 0;
+  display: block;
+  overflow: hidden;
+}
+:root[data-theme="light"] #player-container { background: #0a0a0a; }
+
+/* When the global video portal lives inside the player container,
+   make it absolute-fill so the Plyr wrapper gets a real height to work with. */
+#player-container > #video-portal {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.skip-intro-btn {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  padding: 10px 18px;
+  background: rgba(5, 8, 12, 0.85);
+  color: #eaf2f8;
+  border: 1px solid var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 1px;
+  z-index: 3;
+  transition: background 0.15s, color 0.15s;
+}
+.skip-intro-btn:hover { background: var(--accent); color: #05080c; }
+
+#player-info {
+  flex: 0 0 auto;
+  padding: 14px 24px;
+  background: var(--surface);
+  border-top: 1px solid var(--border-strong);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-height: 56px;
+  flex-wrap: wrap;
+}
+.player-info-left { flex: 1 1 auto; min-width: 0; }
+.player-ep-title {
+  font-size: 13px;
+  color: var(--text);
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.player-ep-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.player-info-right {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+#speed-btn { min-width: 48px; }
+
+#player-shortcuts-hint {
+  flex: 0 0 auto;
+  padding: 6px 24px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  font-size: 9px;
+  color: var(--text-faint);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Subtitle cue styling */
+video::cue {
+  background: rgba(0, 0, 0, 0.7);
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: 18px;
+}
+
+/* ==========================================================================
+   MINI PLAYER — resizable + draggable
+   Using absolute positioning inside a plain block so native `resize: both`
+   renders reliably (flex containers can sometimes hide the resize grip).
+   ========================================================================== */
+#mini-player {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 380px;
+  height: 260px;
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--accent-dim);
+  z-index: 200;
+  overflow: hidden;
+  min-width: 240px;
+  min-height: 180px;
+  max-width: 95vw;
+  max-height: 95vh;
+}
+/* Four custom resize handles — one per corner. */
+.mini-resize-handle {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  z-index: 4;
+  background: transparent;
+}
+.mini-rh-tl { top: -2px;    left: -2px;    cursor: nwse-resize; }
+.mini-rh-tr { top: -2px;    right: -2px;   cursor: nesw-resize; }
+.mini-rh-bl { bottom: -2px; left: -2px;    cursor: nesw-resize; }
+.mini-rh-br { bottom: -2px; right: -2px;   cursor: nwse-resize; }
+.mini-rh-tl::before, .mini-rh-tr::before,
+.mini-rh-bl::before, .mini-rh-br::before {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.mini-rh-tl::before { top: 2px;    left: 2px;   border-top: 2px solid var(--accent); border-left:  2px solid var(--accent); }
+.mini-rh-tr::before { top: 2px;    right: 2px;  border-top: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+.mini-rh-bl::before { bottom: 2px; left: 2px;   border-bottom: 2px solid var(--accent); border-left:  2px solid var(--accent); }
+.mini-rh-br::before { bottom: 2px; right: 2px;  border-bottom: 2px solid var(--accent); border-right: 2px solid var(--accent); }
+:root[data-theme="light"] #mini-player {
+  box-shadow: 0 0 0 1px #000, 4px 4px 0 #000;
+}
+#mini-player-slot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 36px;
+  background: #000;
+  overflow: hidden;
+}
+#mini-player-slot #video-portal,
+#mini-player-slot video {
+  width: 100%;
+  height: 100%;
+}
+.mini-player-info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 36px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border-top: 1px solid var(--border-strong);
+  cursor: grab;
+  user-select: none;
+}
+.mini-player-info.dragging { cursor: grabbing; }
+#mini-player-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--text);
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+.mini-player-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+  pointer-events: auto;
+}
+.mini-player-actions .icon-btn { padding: 0 8px; height: 22px; font-size: 9px; }
+/* SVG icons inside the video mini's action buttons. Without an
+   explicit size, the SVG uses its default 300×150 intrinsic box and
+   blows out the button. */
+.mini-player-actions .icon-btn svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+/* ==========================================================================
+   AUDIO MINI PLAYER
+   Compact horizontal card: cover | body (title + sub + progress + time) | actions
+   Two modes: in-browser fixed overlay (default), document-PiP window.
+   ========================================================================== */
+#audio-mini-player {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 440px;
+  height: 92px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  box-shadow: 0 0 40px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--accent-dim);
+  z-index: 200;
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+}
+#audio-mini-player.dragging { cursor: grabbing; }
+#audio-mini-player[hidden] { display: none; }
+:root[data-theme="light"] #audio-mini-player {
+  box-shadow: 0 0 0 1px #000, 4px 4px 0 #000;
+}
+/* In document-pip mode the element is reparented into a Chrome PiP
+   window; there's no OS-level window chrome for us to anchor to, so
+   reset the fixed positioning and let the PiP window sit it flush. */
+#audio-mini-player.in-pip {
+  position: static;
+  width: 100%;
+  height: 100%;
+  bottom: auto;
+  right: auto;
+  cursor: default;
+  box-shadow: none;
+  border: none;
+}
+
+.audio-mini-cover {
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  background-color: var(--bg);
+  background-size: cover;
+  background-position: center;
+  border: 1px solid var(--border-strong);
+  align-self: center;
+}
+.audio-mini-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: none; /* clicks here fall through to drag handler */
+}
+.audio-mini-title {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-mini-sub {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-mini-progress {
+  height: 3px;
+  background: var(--border-strong);
+  position: relative;
+  margin-top: 4px;
+  pointer-events: auto; /* clickable scrub */
+  cursor: pointer;
+}
+.audio-mini-progress-fill {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 0%;
+  background: var(--accent);
+}
+.audio-mini-time {
+  display: flex;
+  gap: 4px;
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+.audio-mini-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  pointer-events: auto;
+}
+.audio-mini-actions .icon-btn {
+  padding: 0 8px;
+  height: 28px;
+  min-width: 28px;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Consistent SVG sizing inside the audio mini action buttons so the
+   triangle/bars/X/arrows all render at the same visual weight. */
+.audio-mini-actions .icon-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+#audio-mini-player .audio-mini-actions .icon-btn[title*="播放"] {
+  /* Slight accent on the primary play/pause button */
+  border-color: var(--accent-dim);
+}
+/* Mobile: drop into a simpler bottom-bar layout. */
+@media (max-width: 600px) {
+  #audio-mini-player {
+    left: 6px;
+    right: 6px;
+    bottom: 6px;
+    width: auto;
+    height: 72px;
+    padding: 6px 8px;
+    gap: 8px;
+  }
+  .audio-mini-cover { flex: 0 0 50px; width: 50px; height: 50px; }
+  .audio-mini-actions .icon-btn { padding: 0 5px; height: 22px; font-size: 9px; }
+  .audio-mini-time { display: none; }
+}
+
+
+/* ==========================================================================
+   HISTORY
+   ========================================================================== */
+.history-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 44px 44px 60px;
+}
+.history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+#history-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.history-row {
+  display: flex;
+  gap: 16px;
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--accent-dim);
+  cursor: pointer;
+  transition: border-left-color 0.2s, background 0.2s;
+  position: relative;
+}
+.history-row:hover {
+  background: var(--hover);
+  border-left-color: var(--accent);
+}
+.history-row.selected {
+  border-left-color: var(--accent);
+  background: var(--active);
+}
+.history-del-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s, background 0.15s;
+  z-index: 2;
+}
+.history-row:hover .history-del-btn { opacity: 1; }
+.history-del-btn:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--surface-2);
+}
+.history-del-btn svg { width: 12px; height: 12px; }
+
+/* Danger variant for icon-btn (used by 清空 / 删除) */
+.icon-btn.danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+@media (max-width: 600px) {
+  .history-del-btn { opacity: 1; width: 32px; height: 32px; }
+  .history-del-btn svg { width: 14px; height: 14px; }
+}
+.history-thumb {
+  position: relative;
+  flex: 0 0 140px;
+  aspect-ratio: 16/10;
+  background-color: var(--bg);
+  border: 1px solid var(--border-strong);
+  overflow: hidden;
+}
+.history-thumb::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--cover-url, none);
+  background-size: cover;
+  background-position: var(--cover-x, 50%) var(--cover-y, 50%);
+  transform: scale(var(--cover-scale, 1));
+  transform-origin: var(--cover-x, 50%) var(--cover-y, 50%);
+  pointer-events: none;
+}
+.history-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.history-title {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+.history-gone {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--danger);
+  margin-left: 8px;
+}
+.history-sub {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.history-progress {
+  width: 100%;
+  height: 2px;
+  background: var(--border-strong);
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.history-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.history-time {
+  font-size: 10px;
+  color: var(--text-faint);
+  letter-spacing: 0.6px;
+}
+
+/* ==========================================================================
+   ADMIN
+   ========================================================================== */
+.admin-wrap {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 44px 44px 60px;
+}
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.admin-tab {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  padding: 10px 22px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  transition: color 0.2s, background 0.2s, border-color 0.2s;
+  border-radius: 1px;
+}
+.admin-tab:hover { color: var(--text); background: var(--surface-2); }
+.admin-tab.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  margin-top: 16px;
+}
+.admin-table th,
+.admin-table td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.admin-table th {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-weight: 500;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border-strong);
+}
+.admin-table td { font-size: 12px; color: var(--text); }
+.admin-table tr:last-child td { border-bottom: none; }
+.admin-table .admin-del-btn { font-size: 9px; padding: 4px 12px; }
+.admin-del-btn:hover:not([disabled]) {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.stat-cell {
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--accent-dim);
+}
+.stat-label {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1.5px;
+  margin-bottom: 8px;
+}
+.stat-value {
+  font-size: 22px;
+  color: var(--text);
+}
+
+.health-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.health-summary {
+  display: flex;
+  gap: 24px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--accent-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  flex-wrap: wrap;
+}
+.health-summary b { color: var(--accent); font-weight: normal; }
+.health-list {
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  padding: 12px 16px;
+  font-size: 11px;
+  color: var(--text);
+}
+.health-list li { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.health-list li:last-child { border-bottom: none; }
+
+/* ==========================================================================
+   Dialog
+   ========================================================================== */
+.dialog {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  padding: 0;
+  color: var(--text);
+  max-width: 440px;
+  width: 90vw;
+  border-radius: 1px;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  box-shadow: var(--panel-shadow);
+}
+/* 1.5.0 attempted display:flex + max-height:85vh on .dialog so long
+   chip lists wouldn't push the action buttons off-screen, but it
+   broke dialog close behavior on several browsers (the cancel/submit
+   click stopped registering, leaving the dialog stuck on top with
+   no escape). 1.5.1 reverts that approach — instead, the chip list
+   itself caps its height (.types-checkbox-list max-height:50vh below)
+   so the dialog stays a sensible total height without us touching
+   the <dialog> element's own layout. */
+
+/* Wider dialog for the chip-heavy editors so a multi-level category
+   tree can lay out without forcing scroll on every chip. The bare
+   .dialog stays narrow for confirm prompts / login. */
+#create-dialog,
+#edit-dialog,
+#bulk-retag-dialog,
+#bulk-authors-dialog {
+  max-width: min(720px, 92vw);
+}
+.dialog::backdrop { background: rgba(5, 8, 12, 0.82); }
+:root[data-theme="light"] .dialog::backdrop { background: rgba(255, 255, 255, 0.85); }
+
+.dialog form { padding: 28px 28px 22px; }
+
+.dialog-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 2.5px;
+  color: var(--accent);
+  margin-bottom: 18px;
+  text-align: center;
+}
+.dialog-subtitle {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-bottom: 16px;
+  text-align: center;
+  line-height: 1.6;
+  letter-spacing: 0.3px;
+}
+.dialog-subtitle.mono { font-size: 10px; }
+.dialog-error {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--danger);
+  min-height: 14px;
+  margin-top: 4px;
+  margin-bottom: 10px;
+  letter-spacing: 0.3px;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.dialog-actions .btn-primary,
+.dialog-actions .icon-btn {
+  width: auto;
+  height: 38px;
+  padding: 0 22px;
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Cover picker dialog */
+.cover-dialog {
+  max-width: 640px;
+  width: 90vw;
+}
+.cover-current {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  margin-bottom: 16px;
+}
+.cover-current-label {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+.cover-current-name {
+  font-size: 11px;
+  color: var(--accent);
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 10px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  min-height: 120px;
+}
+.cover-thumb {
+  cursor: pointer;
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--border-strong);
+  background: var(--surface);
+  transition: border-color 0.2s, border-left-color 0.2s;
+}
+.cover-thumb:hover {
+  border-color: var(--accent-dim);
+  border-left-color: var(--accent-dim);
+}
+.cover-thumb.selected {
+  border-color: var(--accent);
+  border-left-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.cover-thumb-img {
+  width: 100%;
+  aspect-ratio: 2/3;
+  background-size: cover;
+  background-position: center;
+  background-color: #000;
+}
+/* Per-thumb hover delete (single-shot). Sits in the top-right corner;
+   visible only when an admin (perm-delete) hovers a thumb outside
+   bulk mode. Subdir thumbs disable the button via .cover-thumb-nested
+   and a tooltip pointing to the gallery view. */
+.cover-thumb { position: relative; }
+.cover-thumb-del {
+  position: absolute;
+  top: 4px; right: 4px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid var(--border-strong);
+  color: #fff;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 2;
+}
+.cover-thumb:hover .cover-thumb-del { opacity: 1; }
+.cover-thumb-del:hover { background: var(--danger, #cc4040); }
+.cover-thumb-nested .cover-thumb-del {
+  background: rgba(40,40,40,0.6);
+  cursor: not-allowed;
+}
+/* Bulk-select mode. ✓ overlay visible always (not hover-only),
+   selected thumbs get accent border + dimmed image. Single-delete
+   ✕ button is hidden while in bulk mode to avoid two competing
+   click affordances per thumb. */
+.cover-thumb-check {
+  display: none;
+  position: absolute;
+  top: 6px; left: 6px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--accent, #8fb5c5);
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 2;
+}
+.cover-grid.cover-bulk-mode .cover-thumb-check { display: block; }
+.cover-grid.cover-bulk-mode .cover-thumb-del { display: none; }
+.cover-thumb.cover-thumb-bulk-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.cover-thumb.cover-thumb-bulk-selected .cover-thumb-img { opacity: 0.55; }
+.cover-thumb.cover-thumb-bulk-selected .cover-thumb-check {
+  background: var(--accent, #8fb5c5);
+}
+.cover-thumb.cover-thumb-bulk-selected .cover-thumb-check::after {
+  content: '✓';
+  display: block;
+  text-align: center;
+  line-height: 18px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #000;
+}
+.cover-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.cover-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.cover-bulk-info { color: var(--text-muted); margin-right: 4px; }
+#cover-bulk-toggle.active { background: var(--accent, #8fb5c5); color: #000; }
+.cover-thumb-name {
+  padding: 5px 8px;
+  font-size: 9px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-top: 1px solid var(--border);
+}
+.cover-thumb.selected .cover-thumb-name { color: var(--accent); }
+.cover-grid-empty {
+  grid-column: 1 / -1;
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.cover-grid::-webkit-scrollbar { width: 6px; }
+.cover-grid::-webkit-scrollbar-track { background: transparent; }
+.cover-grid::-webkit-scrollbar-thumb { background: var(--border-strong); }
+.cover-grid::-webkit-scrollbar-thumb:hover { background: var(--accent-dim); }
+
+/* ---- Cover transform editor (crop/zoom/reposition) ---- */
+.cover-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  margin-bottom: 14px;
+}
+.cover-editor[hidden] { display: none; }
+.cover-editor-label {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.cover-editor-previews {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+.cover-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cover-preview-caption {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+.cover-preview-frame {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--accent-dim);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.cover-preview-frame:active { cursor: grabbing; }
+.cover-preview-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--cover-url, none);
+  background-size: cover;
+  background-position: var(--cover-x, 50%) var(--cover-y, 50%);
+  transform: scale(var(--cover-scale, 1));
+  transform-origin: var(--cover-x, 50%) var(--cover-y, 50%);
+  pointer-events: none;
+}
+/* Matches the real .detail-cover aspect ratio (2:3 portrait). */
+.cover-preview-detail .cover-preview-frame {
+  width: 120px;
+  aspect-ratio: 2 / 3;
+}
+/* Matches the real .card aspect ratio (16:10 landscape). */
+.cover-preview-card .cover-preview-frame {
+  width: 200px;
+  aspect-ratio: 16 / 10;
+}
+/* Matches the real .mini-card-cover (also 16:10 but smaller). */
+.cover-preview-mini .cover-preview-frame {
+  width: 140px;
+  aspect-ratio: 16 / 10;
+}
+.cover-editor-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cover-editor-controls label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  flex: 1 1 auto;
+  min-width: 180px;
+}
+.cover-editor-controls input[type="range"] {
+  flex: 1 1 auto;
+  accent-color: var(--accent);
+}
+.cover-editor-value {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  min-width: 44px;
+  text-align: right;
+}
+.cover-editor-hint {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.8px;
+  font-family: var(--font-mono);
+}
+
+/* ==========================================================================
+   TOAST
+   ========================================================================== */
+#toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 1000;
+  pointer-events: none;
+  max-width: calc(100vw - 32px);
+}
+.toast {
+  padding: 10px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-left: 2px solid var(--accent);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateY(10px);
+  animation: toast-in 0.2s ease-out forwards;
+  pointer-events: auto;
+  min-width: 200px;
+  text-align: center;
+}
+:root[data-theme="light"] .toast { box-shadow: 2px 2px 0 var(--border); }
+.toast-success { border-left-color: var(--success); }
+.toast-error   { border-left-color: var(--danger); }
+.toast.fade-out { animation: toast-out 0.3s ease-in forwards; }
+@keyframes toast-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes toast-out {
+  to { opacity: 0; transform: translateY(10px); }
+}
+
+/* ==========================================================================
+   Scrollbars
+   ========================================================================== */
+#view-home::-webkit-scrollbar,
+#view-detail::-webkit-scrollbar,
+#view-history::-webkit-scrollbar,
+#view-admin::-webkit-scrollbar,
+#player-episode-list::-webkit-scrollbar { width: 8px; }
+
+#view-home::-webkit-scrollbar-track,
+#view-detail::-webkit-scrollbar-track,
+#view-history::-webkit-scrollbar-track,
+#view-admin::-webkit-scrollbar-track,
+#player-episode-list::-webkit-scrollbar-track { background: transparent; }
+
+#view-home::-webkit-scrollbar-thumb,
+#view-detail::-webkit-scrollbar-thumb,
+#view-history::-webkit-scrollbar-thumb,
+#view-admin::-webkit-scrollbar-thumb,
+#player-episode-list::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 1px;
+}
+#view-home::-webkit-scrollbar-thumb:hover,
+#view-detail::-webkit-scrollbar-thumb:hover,
+#view-history::-webkit-scrollbar-thumb:hover,
+#view-admin::-webkit-scrollbar-thumb:hover,
+#player-episode-list::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ==========================================================================
+   RESPONSIVE BREAKPOINTS
+   ========================================================================== */
+
+/* ---- WIDE DESKTOP (>= 1600px) ---- */
+@media (min-width: 1600px) {
+  #cards {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    max-width: 1800px;
+    padding-left: 60px;
+    padding-right: 60px;
+    gap: 20px;
+  }
+  .detail-scroll, .home-row, .home-toolbar { max-width: 1800px; }
+  .home-row, .home-toolbar, .detail-hero,
+  .detail-episodes, .detail-comments {
+    padding-left: 60px;
+    padding-right: 60px;
+  }
+  .detail-cover { flex: 0 0 300px; }
+  .detail-title { font-size: 30px; }
+  header { padding: 16px 32px; }
+  #player-sidebar { flex: 0 0 380px; }
+}
+
+/* ---- EXTRA WIDE (>= 2200px) ---- */
+@media (min-width: 2200px) {
+  #cards {
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    max-width: 2100px;
+  }
+  .detail-scroll, .home-row, .home-toolbar { max-width: 2100px; }
+  html { font-size: 14px; }
+}
+
+/* ---- MEDIUM (laptop / landscape tablet, 900-1280px) ---- */
+@media (max-width: 1280px) {
+  .home-row, .home-toolbar, #cards,
+  .detail-hero, .detail-episodes, .detail-comments,
+  .history-wrap, .admin-wrap {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  #player-sidebar { flex: 0 0 280px; }
+}
+
+/* ---- TABLET (600-900px) ---- */
+@media (max-width: 900px) {
+  header {
+    padding: 12px 16px;
+    gap: 10px;
+  }
+  header h1 { font-size: 10px; letter-spacing: 2px; }
+  .header-actions { gap: 6px; }
+  .icon-btn { height: 26px; padding: 0 10px; font-size: 9px; }
+
+  .home-row, .home-toolbar, #cards,
+  .detail-hero, .detail-episodes, .detail-comments,
+  .history-wrap, .admin-wrap {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  #cards {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .card { min-height: 140px; padding: 20px 16px 16px; }
+  .card-name { font-size: 14px; }
+
+  .detail-hero { padding-top: 36px; padding-bottom: 28px; min-height: 0; }
+  .detail-content { gap: 24px; }
+  .detail-cover { flex: 0 0 200px; }
+  .detail-title { font-size: 22px; }
+
+  #player-sidebar { flex: 0 0 240px; }
+  .mini-card { flex: 0 0 180px; }
+
+  .history-row { gap: 12px; }
+  .history-thumb { flex: 0 0 120px; }
+}
+
+/* ---- TABLET / SMALL WINDOW (601-768px) ----
+   Stack the video player vertically once the window narrows to where the
+   side-by-side layout would crush either pane. Above 768px the row
+   layout still has enough room (≥520px for the video pane after the
+   240px sidebar from the ≤900 block). Below 768 we switch to portrait
+   stacking — the same direction as ≤600 — but with looser spacing
+   appropriate for tablets and split-window browsers.
+
+   The phone-specific tightening (button strip 3-per-row, sticky
+   sidebar head, 36px touch target, etc.) lives in the ≤600 block and
+   wins by cascade order, so this block intentionally stays minimal and
+   only handles the row→column flip plus sidebar height cap. */
+@media (max-width: 768px) and (min-width: 601px) {
+  #view-player { flex-direction: column; overflow-x: hidden; }
+  #player-sidebar {
+    flex: 0 0 auto;
+    /* 38vh leaves ~62vh for video + info + header on a 1024-tall tablet
+       portrait — comfortable. Lower than ≤600's 50vh because tablets
+       have more vertical room and we'd rather keep the video bigger. */
+    max-height: 38vh;
+    min-height: 140px;
+    order: 2;
+    border-right: none;
+    border-top: 1px solid var(--border-strong);
+  }
+  #player-main { order: 1; flex: 0 0 auto; min-height: 0; }
+  #player-container {
+    flex: 0 0 auto;
+    aspect-ratio: 16 / 9;
+    max-height: 50vh;
+    min-height: 0;
+    width: 100%;
+  }
+  /* Info bar stays in row layout at this size — there's enough width
+     for title + 6 controls to share a line. Just guard against title
+     pushing controls off the right. */
+  #player-info { flex-wrap: wrap; gap: 10px; }
+  .player-info-left { min-width: 0; }
+}
+
+/* ==========================================================================
+   Novel reader (v1)
+
+   Layout: fixed-height toolbar on top, scrollable content fills the rest,
+   thin progress bar pinned at the bottom of the view. The content scroll
+   container itself is the source of truth for reading position; the
+   progress bar updates from its scrollTop / scrollHeight.
+
+   Font size is adjustable via the toolbar A−/A+ buttons. Persisted in
+   localStorage as ds124:novelFont (number 12-32). Applied via CSS var
+   --novel-font-size on :root so the rule below picks it up.
+   ========================================================================== */
+.novel-reader-toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.novel-reader-toolbar .icon-btn { padding: 6px 10px; min-width: 0; }
+.novel-reader-title-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+}
+.novel-reader-collection {
+  font-size: 10px;
+  color: var(--accent);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  opacity: 0.75;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.novel-reader-title {
+  font-size: 14px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.novel-reader-spacer { flex: 0 0 8px; }
+.novel-reader-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.novel-reader-controls .mono {
+  min-width: 38px;
+  text-align: right;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.novel-reader-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 32px 36px 64px;
+  font-size: var(--novel-font-size, 18px);
+  line-height: 1.85;
+  font-family: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", serif;
+  color: var(--text);
+}
+.novel-reader-content p {
+  margin: 0 0 1em;
+  text-indent: 2em;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+.novel-reader-content p:first-child { margin-top: 0; }
+.novel-reader-loading,
+.novel-reader-empty,
+.novel-reader-error {
+  padding: 60px 0;
+  text-align: center;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+.novel-reader-error { color: var(--danger, #c44); }
+.novel-pdf-page {
+  display: block;
+  margin: 0 auto 16px;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  max-width: 100%;
+  height: auto;
+}
+:root[data-theme="light"] .novel-pdf-page {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--border);
+}
+.novel-pdf-status {
+  text-align: center;
+  padding: 24px 0;
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+}
+
+.novel-reader-progress-bar {
+  flex: 0 0 auto;
+  height: 3px;
+  background: var(--border);
+  position: relative;
+}
+.novel-reader-progress-bar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.2s ease-out;
+}
+
+/* Phone tweaks (matching the existing 600px breakpoint convention) */
+@media (max-width: 600px) {
+  .novel-reader-toolbar { padding: 8px 12px; gap: 8px; }
+  .novel-reader-title { font-size: 12px; }
+  .novel-reader-collection { font-size: 9px; }
+  .novel-reader-content { padding: 18px 16px 48px; }
+}
+
+/* ---- PHONE / PORTRAIT (<= 600px) ----
+   Single-row header + collapsible filter pill. Default state shows ONLY:
+   header (~44px) + collapsed toolbar (~44px). Tap the pill or the chevron
+   to expand the toolbar inline (chips / op / sort / search / admin). The
+   goal: keep ≥80% of the viewport for actual cards / content. */
+@media (max-width: 600px) {
+  html, body { font-size: 12px; }
+
+  /* HEADER — hard one-row. flex-wrap:nowrap, hide noisy bits, shrink the
+     rest. h1 brand text is dropped on mobile (it has no functional value
+     once the layout is established); back/menu/kind-switch/user/theme
+     all stay reachable. */
+  header {
+    padding: 8px 12px;
+    gap: 6px;
+    flex-wrap: nowrap;
+    min-height: 44px;
+  }
+  .header-left {
+    width: auto;
+    margin-bottom: 0;
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+  .header-actions {
+    width: auto;
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+  }
+  header h1 { display: none; }
+  header::after { display: none; }
+
+  /* User pill collapses to icon-only — drops the username text but
+     keeps the menu trigger visible. */
+  .user-pill #user-name { display: none; }
+  .user-pill { padding: 0 8px; height: 28px; }
+
+  .icon-btn { height: 28px; padding: 0 10px; font-size: 9px; }
+  .theme-toggle { height: 28px; }
+
+  /* HOME — page padding stays consistent across rows */
+  .home-row, .home-toolbar, #cards,
+  .detail-hero, .detail-episodes, .detail-comments,
+  .history-wrap, .admin-wrap {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .home-row { padding-top: 14px; }
+
+  /* HOME TOOLBAR — two states.
+     COLLAPSED (default): single row showing only the .toolbar-mobile-bar
+       which itself is just a tap target ("筛选状态" pill).
+     EXPANDED (.expanded class added by JS click): the full column layout
+       below renders, restoring chips / op / sort / search / admin.
+     We override flex-direction in the collapsed branch so the row stays
+     compact instead of stacking the (mostly invisible) children. */
+  .home-toolbar:not(.expanded) {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+  .home-toolbar:not(.expanded) > *:not(.toolbar-mobile-bar) {
+    display: none !important;
+  }
+  /* 1.5.3+: row+wrap layout so groups of related controls can sit on
+     the same line (sort + dir, fav + 含隐藏) instead of each taking a
+     full-width row. The flex-basis on individual children below
+     decides who shares vs takes a row. */
+  .home-toolbar {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 8px;
+    padding-top: 14px;
+  }
+  .toolbar-mobile-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    flex: 1 0 100%;
+  }
+  .toolbar-summary {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 1px;
+    padding: 8px 12px;
+    cursor: pointer;
+    text-align: left;
+  }
+  .toolbar-summary:hover,
+  .toolbar-summary:focus-visible { color: var(--accent); border-color: var(--accent-dim); outline: none; }
+  .toolbar-summary-caret {
+    color: var(--accent);
+    font-size: 11px;
+    transition: transform 0.2s;
+    flex: 0 0 auto;
+  }
+  .home-toolbar.expanded .toolbar-summary-caret { transform: rotate(180deg); }
+  .home-toolbar.expanded .toolbar-summary { background: var(--accent); color: var(--bg); }
+  .home-toolbar.expanded .toolbar-summary .toolbar-summary-caret { color: var(--bg); }
+
+  .filter-chips button { padding: 8px 12px; font-size: 9px; }
+
+  /* 1.5.3 mobile compaction: previously every toolbar child sat on
+     its own row (column flex), eating > 50% of viewport when expanded.
+     Now we let related controls share rows.
+       - filter-chips / filter-op / batch-manage / upload: each row 100%
+       - sort-select + sort-dir-btn: share one row (select takes remainder)
+       - fav-toggle + show-hidden-toggle: share one row (each ~50%)
+       - search-wrap (search box + 高级搜索 →): hidden — header 🔍 already
+         covers advanced search and the separate input duplicates it on
+         narrow screens
+       - filter-spacer: hidden (was a desktop flex-grow shim)
+     Goal: expanded toolbar stays under ~30% of viewport height. */
+  .filter-chips { flex: 1 0 100%; }
+  .filter-op { flex: 1 0 100%; }
+  .filter-spacer { display: none; }
+  .search-wrap { display: none; }
+  .fav-toggle {
+    order: -1;
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    box-sizing: border-box;
+    margin: 0;
+  }
+  #show-hidden-toggle {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+    box-sizing: border-box;
+    margin: 0;
+  }
+  .sort-select {
+    flex: 1 1 calc(100% - 52px - 8px);
+    width: auto;
+    min-width: 0;
+  }
+  #sort-dir-btn { flex: 0 0 48px; }
+  #home-bulk-btn,
+  #home-audio-upload-btn { flex: 1 0 100%; }
+
+  #cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    padding-top: 14px;
+    padding-bottom: 30px;
+  }
+  .card { min-height: 0; aspect-ratio: 16/10; padding: 16px 14px 14px; }
+  .card-name { font-size: 13px; }
+
+  .mini-card { flex: 0 0 160px; }
+
+  /* Detail */
+  .detail-hero {
+    padding-top: 24px;
+    padding-bottom: 20px;
+    min-height: 0;
+  }
+  .detail-content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+  .detail-cover {
+    flex: 0 0 auto;
+    width: 160px;
+    aspect-ratio: 2/3;
+    align-self: flex-start;
+  }
+  .detail-title { font-size: 20px; }
+  .detail-desc { font-size: 12px; }
+  .detail-actions .btn-primary,
+  .detail-actions .btn-secondary { flex: 1 1 auto; padding: 10px 16px; }
+
+  .detail-episodes { padding-top: 20px; padding-bottom: 24px; }
+  .ep-row { padding: 10px 12px; }
+  .ep-title { font-size: 12px; }
+  .ep-edit-btn { opacity: 1; }  /* Always visible, no hover on touch */
+
+  /**
+   * Video player — phone portrait stacking.
+   *
+   * Layout: video on top (16:9 capped at 50vh), info bar in the middle,
+   * episode sidebar pinned to the bottom with its own scroll container.
+   *
+   * The 50vh cap (down from 56vh) leaves enough vertical room below the
+   * video for the info bar (~110px) plus a peek of the episode list,
+   * which is critical on a 360x640 phone where every row counts.
+   *
+   * overflow-x:hidden on #view-player is a defensive guard: long episode
+   * titles, the Plyr wrapper, or a stray padding can otherwise push the
+   * viewport sideways on narrow screens.
+   */
+  #view-player { flex-direction: column; overflow-x: hidden; }
+  #player-sidebar {
+    flex: 1 1 auto;
+    /* Cap to a viewport-relative height so the episode list scrolls
+       inside itself rather than pushing the player surface off-screen
+       when a collection has many episodes. */
+    max-height: 50vh;
+    min-height: 140px;
+    order: 2;
+    border-right: none;
+    border-top: 1px solid var(--border-strong);
+    overflow-x: hidden;
+  }
+  /* Sticky collection-name strip stays visible while the user scrolls
+     the episode list — the user always knows which collection they're
+     in even after scrolling deep. Desktop already pins this via flex
+     so the rule only applies on phone. */
+  #player-sidebar .player-sidebar-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--surface);
+    padding: 12px 14px 10px;
+  }
+  #player-sidebar #player-sidebar-title { font-size: 11px; }
+  #player-main {
+    order: 1;
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+  #player-container {
+    flex: 0 0 auto;
+    aspect-ratio: 16 / 9;
+    /* 50vh chosen over 56vh so #player-info plus the top of the episode
+       sidebar are both visible above the fold on common phone heights
+       (640-844 CSS px). */
+    max-height: 50vh;
+    min-height: 0;
+    width: 100%;
+  }
+  #player-info {
+    padding: 10px 12px;
+    gap: 8px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .player-info-left { width: 100%; min-width: 0; }
+  .player-ep-title { font-size: 14px; }
+  /**
+   * Six controls (prev / next / +sub / LOOP / ALL / SHUF) laid out
+   * three-per-row on phones. Each cell expands to ~1/3 of the row so the
+   * touch target is generous (~33vw wide x 36 tall) regardless of label
+   * length, and the row reads as a single button strip.
+   *
+   * .play-switch is normally inline-flex with no border — promoted here
+   * to a bordered flex cell so it visually matches its sibling icon-btn
+   * inside the strip. The override is scoped to .player-info-right so
+   * standalone .play-switch widgets elsewhere keep their original look.
+   */
+  .player-info-right {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    width: 100%;
+    justify-content: stretch;
+  }
+  .player-info-right .icon-btn {
+    flex: 1 1 calc(33.333% - 4px);
+    min-width: 0;
+    height: 36px;
+    padding: 0 6px;
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .player-info-right .play-switch {
+    flex: 1 1 calc(33.333% - 4px);
+    min-width: 0;
+    height: 36px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 6px;
+    padding: 0 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: 1px;
+    box-sizing: border-box;
+  }
+  #player-shortcuts-hint { display: none; }
+  /* Skip-intro overlay tightens so it doesn't dominate the top-right of
+     a 360-wide video. */
+  .skip-intro-btn {
+    top: 10px;
+    right: 10px;
+    padding: 6px 12px;
+    font-size: 10px;
+    letter-spacing: 1px;
+  }
+  /* Format-not-supported overlay shrinks padding to fit narrow phones. */
+  .player-error-inner { padding: 20px 14px; }
+  .player-error-msg { font-size: 12px; }
+
+  /* Mini player — go to bottom full width on phone */
+  #mini-player {
+    width: calc(100vw - 12px) !important;
+    right: 6px !important;
+    left: 6px !important;
+    bottom: 6px !important;
+    top: auto !important;
+    min-width: 0;
+    max-height: 60vh;
+  }
+  /* Hide custom resize handles on phones (pinned layout) */
+  .mini-resize-handle { display: none; }
+
+  /* History */
+  .history-row { flex-direction: column; }
+  .history-thumb { width: 100%; max-width: none; aspect-ratio: 16/9; flex: 0 0 auto; }
+
+  /* Admin */
+  .admin-wrap { padding: 20px 14px 40px; }
+  .admin-tabs { gap: 4px; overflow-x: auto; flex-wrap: nowrap; }
+  .admin-tab { padding: 8px 14px; flex: 0 0 auto; }
+  .admin-table { font-size: 11px; }
+  .admin-table th, .admin-table td { padding: 9px 10px; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat-cell { padding: 12px 14px; }
+  .stat-value { font-size: 18px; }
+
+  /* Dialogs full-screen-ish */
+  .dialog {
+    max-width: calc(100vw - 16px);
+    width: calc(100vw - 16px);
+  }
+  .dialog form { padding: 22px 18px 16px; }
+  .cover-dialog {
+    max-width: calc(100vw - 16px);
+    width: calc(100vw - 16px);
+  }
+  .cover-grid {
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    max-height: 240px;
+    gap: 6px;
+  }
+  .dialog-actions { gap: 6px; }
+  .dialog-actions .btn-primary,
+  .dialog-actions .icon-btn {
+    height: 36px;
+    padding: 0 14px;
+    font-size: 10px;
+  }
+
+  /* Toasts */
+  #toast-container { bottom: 16px; }
+  .toast { font-size: 10px; padding: 8px 14px; min-width: 0; }
+}
+
+/* ---- NARROW PHONE (<= 380px) ----
+   Walkman / extra-narrow Android phones. Video player tightening:
+   button strip cells get smaller padding so 3-per-row still fits
+   without text clipping; sidebar head shrinks to claw back vertical
+   room for the episode list. */
+@media (max-width: 380px) {
+  .detail-cover { width: 130px; }
+  .detail-title { font-size: 18px; }
+  .card-name { font-size: 12px; }
+  #cards {
+    grid-template-columns: 1fr;
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .home-toolbar { padding-left: 10px; padding-right: 10px; }
+
+  /* Video player — extra-narrow tightening on top of the ≤600 rules. */
+  .player-ep-title { font-size: 13px; }
+  .player-ep-meta { font-size: 9px; letter-spacing: 0.8px; }
+  .player-info-right { gap: 4px; }
+  .player-info-right .icon-btn,
+  .player-info-right .play-switch {
+    height: 34px;
+    font-size: 9px;
+    padding: 0 4px;
+    /* Shrink the 3-cell width math to match the smaller gap so cells
+       stay equal-width without flex-basis rounding leaving the third
+       column shorter. */
+    flex: 1 1 calc(33.333% - 3px);
+  }
+  .player-info-right .play-switch { gap: 4px; }
+  /* Track + dot of the toggle stays visible but compact. play-switch
+     internals already get sized down by the global ≤600 .play-switch-*
+     rules at line ~6126. */
+  #player-sidebar #player-sidebar-title { font-size: 10px; letter-spacing: 1.5px; }
+  #player-sidebar .player-sidebar-head { padding: 10px 12px 8px; }
+  /* Skip-intro overlay further shrinks for a 320-360 wide video. */
+  .skip-intro-btn { padding: 5px 10px; font-size: 9px; }
+}
+
+/* ---- SHORT HEIGHT (landscape phones) ----
+   Restores the side-by-side player layout when the phone is rotated.
+   The episode sidebar uses a clamp(160, 30vw, 220) width so a narrow
+   landscape (e.g. 568x320 / 480x320 / 320x240 walkman-class) doesn't
+   leave the video pane crushed below ~260px wide.
+
+   Sticky-head and overflow guards from the portrait block are reset
+   here because landscape returns to row layout where they're not
+   needed (and would otherwise paint a duplicate header strip). */
+@media (max-height: 500px) and (orientation: landscape) {
+  #view-player { flex-direction: row; overflow-x: hidden; }
+  #player-sidebar {
+    flex: 0 0 clamp(160px, 30vw, 220px);
+    max-height: none;
+    min-height: 0;
+    border-right: 1px solid var(--border-strong);
+    border-top: none;
+    order: 0;
+  }
+  /* Reset the portrait sticky head — in row mode the head sits at the
+     top of a tall narrow column and doesn't need sticky behavior. */
+  #player-sidebar .player-sidebar-head {
+    position: static;
+    padding: 10px 12px 8px;
+  }
+  #player-main { order: 0; min-height: 0; flex: 1 1 auto; min-width: 0; }
+  /* In landscape the container fills available height instead of
+     locking to 16:9, otherwise the bottom info bar would push the
+     video into the upper half of the viewport. */
+  #player-container {
+    flex: 1 1 auto;
+    aspect-ratio: auto;
+    max-height: none;
+    min-width: 0;
+  }
+  /* Compact info bar so prev/next + LOOP/ALL/SHUF + title fit in a
+     single low-height row. Override the portrait column-stack so the
+     bar uses the full landscape width efficiently. */
+  #player-info {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 6px 12px;
+    min-height: 0;
+  }
+  .player-ep-title { font-size: 12px; }
+  .player-ep-meta { font-size: 9px; }
+  .player-info-right { width: auto; gap: 4px; }
+  .player-info-right .icon-btn {
+    flex: 0 0 auto;
+    height: 28px;
+    padding: 0 8px;
+    font-size: 9px;
+  }
+  /* Restore inline play-switch look (no bordered cell) — the portrait
+     button-strip styling would waste landscape width. */
+  .player-info-right .play-switch {
+    flex: 0 0 auto;
+    height: 28px;
+    border: none;
+    padding: 0 4px;
+  }
+  .detail-hero { padding: 20px 16px; }
+}
+
+/* ==========================================================================
+   NEW IN 1.2 — Settings menu / icon toolbar / manage bar / episode submenu
+   ========================================================================== */
+
+/* Icon-only button variant (fixed square) */
+.icon-btn.icon-only {
+  width: 28px;
+  padding: 0;
+}
+.icon-btn.icon-only svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+/* Settings menu popover */
+.menu-popover {
+  position: fixed;
+  z-index: 300;
+  min-width: 200px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--panel-shadow), 0 10px 30px rgba(0, 0, 0, 0.5);
+  padding: 6px 0;
+}
+:root[data-theme="light"] .menu-popover {
+  box-shadow: 0 0 0 1px #000, 4px 4px 0 #000;
+}
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+.menu-item:hover { background: var(--hover); }
+.menu-item.danger:hover { color: var(--danger); }
+.menu-item .menu-icon {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.menu-item:hover .menu-icon { color: var(--accent); }
+.menu-item .menu-icon svg { width: 14px; height: 14px; }
+.menu-item .menu-label { flex: 1 1 auto; }
+
+/* Toggle switch inside a menu row. Pure CSS — no JS needed to paint state. */
+.menu-item-toggle { cursor: pointer; }
+.menu-toggle {
+  flex: 0 0 auto;
+  position: relative;
+  width: 28px;
+  height: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: transparent;
+  transition: background 0.15s, border-color 0.15s;
+}
+.menu-toggle::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: left 0.15s, background 0.15s;
+}
+.menu-toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.menu-toggle.on::after {
+  left: 15px;
+  background: var(--bg);
+}
+.menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+.menu-footer {
+  padding: 8px 16px 2px;
+  font-size: 9px;
+  color: var(--text-faint);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: center;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+}
+
+/* Detail hero toolbar (icon buttons) */
+.detail-toolbar {
+  display: flex;
+  gap: 6px;
+  margin-top: 18px;
+  flex-wrap: wrap;
+}
+.icon-action {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  border-radius: 1px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  position: relative;
+}
+.icon-action:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.icon-action:active { background: var(--hover); }
+.icon-action.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.icon-action.danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+.icon-action svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+/* Manage mode bottom bar */
+.manage-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: var(--surface);
+  border-top: 1px solid var(--accent);
+  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.5);
+  flex-wrap: wrap;
+}
+:root[data-theme="light"] .manage-bar {
+  box-shadow: 0 0 0 1px #000, 0 -4px 0 #000;
+}
+.manage-bar-info {
+  font-size: 11px;
+  color: var(--text);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.manage-bar-info #manage-count { color: var(--accent); }
+.manage-bar .icon-btn.danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* Episode submenu popover (triggered by per-row ⋮) */
+.ep-menu {
+  position: fixed;
+  z-index: 300;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--panel-shadow), 0 10px 30px rgba(0, 0, 0, 0.5);
+  padding: 6px 0;
+}
+:root[data-theme="light"] .ep-menu {
+  box-shadow: 0 0 0 1px #000, 4px 4px 0 #000;
+}
+
+/* Per-row ⋮ button */
+.ep-submenu-btn {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  align-self: center;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-dim);
+  border-radius: 1px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.ep-submenu-btn:hover {
+  color: var(--accent);
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+}
+.ep-submenu-btn svg { width: 14px; height: 14px; }
+
+/* Episode manage-mode checkbox indicator */
+.ep-check {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  align-self: center;
+  color: var(--text-dim);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ep-check svg { width: 18px; height: 18px; }
+.ep-row.selected .ep-check { color: var(--accent); }
+.ep-row.selected { background: var(--active); border-left-color: var(--accent); }
+
+/* ==========================================================================
+   Plyr — theme to Chiral cold HUD
+   ========================================================================== */
+:root {
+  --plyr-color-main: var(--accent);
+  --plyr-video-background: #000;
+  --plyr-menu-background: var(--surface);
+  --plyr-menu-color: var(--text);
+  --plyr-menu-item-arrow-color: var(--text-dim);
+  --plyr-menu-radius: 1px;
+  --plyr-tooltip-background: var(--surface);
+  --plyr-tooltip-color: var(--text);
+  --plyr-tooltip-radius: 1px;
+  --plyr-font-family: var(--font-mono);
+  --plyr-font-size-base: 12px;
+  --plyr-font-size-small: 10px;
+  --plyr-font-size-large: 14px;
+  --plyr-font-size-time: 11px;
+  --plyr-font-weight-regular: 400;
+  --plyr-control-icon-size: 16px;
+  --plyr-control-spacing: 10px;
+  --plyr-control-radius: 1px;
+  --plyr-range-fill-background: var(--accent);
+  --plyr-range-thumb-background: var(--accent);
+  --plyr-range-thumb-shadow: 0 0 0 1px var(--accent);
+  --plyr-video-controls-background: linear-gradient(transparent, rgba(5, 8, 12, 0.92));
+  --plyr-video-progress-buffered-background: rgba(143, 181, 197, 0.25);
+  --plyr-audio-controls-background: var(--surface);
+}
+
+.plyr {
+  font-family: var(--font-mono);
+  border-radius: 0;
+}
+.plyr--video { background: #000; }
+.plyr__controls {
+  padding: 14px 14px 10px;
+}
+.plyr__control {
+  border-radius: 1px;
+}
+.plyr__control:hover {
+  background: rgba(143, 181, 197, 0.2) !important;
+}
+.plyr__control[aria-expanded="true"] {
+  background: var(--accent-dim) !important;
+}
+.plyr__control--overlaid {
+  background: rgba(5, 8, 12, 0.7);
+  border: 1px solid var(--accent);
+  border-radius: 1px;
+}
+.plyr__control--overlaid:hover {
+  background: var(--accent) !important;
+  color: #000;
+}
+
+/* Custom prev/next-episode buttons inside Plyr control bar */
+.plyr__control--custom svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Menu panel */
+.plyr__menu__container {
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.plyr__menu__container::after { display: none; }
+.plyr__menu__container [role="menu"] { padding: 4px 0; }
+.plyr__menu__container [role="menuitem"],
+.plyr__menu__container [role="menuitemradio"] {
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  padding: 8px 12px;
+}
+.plyr__menu__container .plyr__menu__value {
+  color: var(--accent);
+}
+/* Radio-menu "selected" state (speed/quality submenus). Plyr's default
+   fills the radio circle with --plyr-color-main and puts a white dot
+   inside, which on our pale-blue accent washes out and doesn't read as
+   "this is the current value". Tint the whole row text and boost the
+   radio contrast so the selected line is obvious at a glance. */
+.plyr__menu__container .plyr__control[role="menuitemradio"][aria-checked="true"] {
+  color: var(--accent);
+}
+.plyr__menu__container .plyr__control[role="menuitemradio"][aria-checked="true"]::before {
+  background: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.plyr__menu__container .plyr__control[role="menuitemradio"][aria-checked="true"]::after {
+  background: var(--surface);
+}
+
+/* Tooltips */
+.plyr__tooltip {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  border-radius: 1px;
+  padding: 5px 10px;
+}
+.plyr__tooltip::before { display: none; }
+
+/* Time */
+.plyr__time {
+  font-family: var(--font-mono);
+  letter-spacing: 0.5px;
+}
+
+/* Progress bar */
+.plyr__progress__buffer { color: rgba(143, 181, 197, 0.3); }
+.plyr--full-ui input[type="range"] { color: var(--accent); }
+
+/* Captions */
+.plyr__captions {
+  font-family: var(--font-body);
+  font-size: 18px;
+}
+.plyr__caption {
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  padding: 4px 10px;
+}
+
+/* ==========================================================================
+   LIGHT MODE extra refinements — Plyr
+   ========================================================================== */
+:root[data-theme="light"] {
+  /* Light-mode control bar:
+     - NO gradient (user explicitly rejected the old linear-gradient
+       from-transparent-to-white; it looked muddy against the crisp
+       flat surfaces the rest of the UI uses).
+     - BUT also not fully transparent — light-mode controls are
+       black-on-transparent, which disappears entirely over
+       dark-background video content (e.g. a night scene, a black
+       title card, or letterbox bars). The progress bar and play
+       button just vanish.
+     - Compromise: a solid, near-opaque light panel the same tone as
+       the rest of the UI. Flat (no gradient), always provides
+       contrast, blends with the light theme aesthetic. */
+  --plyr-video-controls-background: rgba(245, 247, 250, 0.94);
+  --plyr-menu-background: #ffffff;
+  --plyr-tooltip-background: #ffffff;
+  --plyr-tooltip-color: #000000;
+}
+/* Force a small top border on the light-mode control bar so it reads
+   as a defined panel rather than a random blob floating over the video. */
+:root[data-theme="light"] .plyr__controls {
+  border-top: 1px solid var(--border-strong);
+}
+:root[data-theme="light"] .plyr--video { background: #0a0a0a; }
+:root[data-theme="light"] .plyr__control--overlaid {
+  background: #000;
+  color: #fff;
+  border-color: #000;
+}
+:root[data-theme="light"] .plyr__menu__container {
+  border-color: #000;
+  box-shadow: 4px 4px 0 #000;
+}
+:root[data-theme="light"] .plyr__tooltip { border-color: #000; }
+
+/* ── Play All Bar ── */
+.play-all-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+}
+.play-all-count {
+  font-size: 13px;
+  color: var(--text-muted, #888);
+}
+.liked-hidden-switch {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+/* ── Home Tracklist (play-all / liked) ── */
+.home-tracklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+.home-tracklist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background .1s ease;
+}
+.home-tracklist li:hover { background: var(--surface); }
+.home-tracklist .tl-num { color: var(--text-muted); min-width: 3ch; text-align: right; }
+.home-tracklist .tl-title { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-tracklist .tl-col { color: var(--text-muted); font-size: 11px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Play Mode Toggle Switches ── */
+.play-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  user-select: none;
+  vertical-align: middle;
+}
+.play-switch input { display: none; }
+.play-switch-track {
+  width: 28px;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--border);
+  position: relative;
+  transition: background .2s ease;
+}
+.play-switch-track::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted, #888);
+  transition: transform .2s ease, background .2s ease;
+}
+.play-switch input:checked + .play-switch-track {
+  background: var(--accent, #8fb5c5);
+}
+.play-switch input:checked + .play-switch-track::after {
+  transform: translateX(14px);
+  background: #fff;
+}
+.play-switch-label {
+  font-size: 11px;
+  color: var(--text-muted, #888);
+  transition: color .2s ease;
+}
+.play-switch input:checked ~ .play-switch-label {
+  color: var(--accent, #8fb5c5);
+}
+
+.like-switch input:checked + .like-track {
+  background: #e25555;
+}
+.like-switch input:checked ~ .play-switch-label {
+  color: #e25555;
+}
+
+/* ── Episode Sort Bar ── */
+.ep-sort-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.ep-sort-select {
+  flex: 1 1 auto;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ep-sort-dir-btn {
+  flex: 0 0 auto;
+  font-size: 14px;
+  padding: 2px 6px;
+}
+
+/* ── Volume OSD ── */
+#volume-osd {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0,0,0,0.72);
+  color: #fff;
+  padding: 12px 22px;
+  border-radius: 8px;
+  font-size: 16px;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .25s ease;
+  white-space: nowrap;
+}
+#volume-osd.visible { opacity: 1; }
+.volume-osd-icon { font-size: 22px; line-height: 1; }
+.volume-osd-bar {
+  width: 120px;
+  height: 6px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.volume-osd-fill {
+  height: 100%;
+  background: var(--accent, #8fb5c5);
+  border-radius: 3px;
+  transition: width .15s ease;
+}
+.volume-osd-pct { min-width: 3ch; text-align: right; }
+
+/* ── Image Gallery ── */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  padding: 12px;
+}
+.gallery-thumb {
+  aspect-ratio: 1;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  position: relative;
+}
+/* Bulk-delete mode (admin). Each thumb gets a checkmark overlay; the
+   selected ones get an accent border + dimmed image. The overlay is
+   hidden outside bulk mode so normal viewing stays visually clean. */
+.gallery-thumb-check {
+  display: none;
+  position: absolute;
+  top: 6px; left: 6px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--accent, #8fb5c5);
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 2;
+}
+.gallery-bulk-mode .gallery-thumb-check { display: block; }
+.gallery-thumb-selected { border-color: var(--accent, #8fb5c5); }
+.gallery-thumb-selected > img { opacity: 0.55; }
+.gallery-thumb-selected .gallery-thumb-check {
+  background: var(--accent, #8fb5c5);
+}
+.gallery-thumb-selected .gallery-thumb-check::after {
+  content: '✓';
+  display: block;
+  text-align: center;
+  line-height: 18px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #000;
+}
+.gallery-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.gallery-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.gallery-bulk-info { color: var(--text-muted); margin-right: 4px; }
+#gallery-bulk-toggle.active { background: var(--accent, #8fb5c5); color: #000; }
+.gallery-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.gallery-more:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.gallery-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform .15s ease;
+}
+.gallery-thumb:hover img { transform: scale(1.05); }
+.gallery-sentinel {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 20px;
+  color: var(--text-muted, #888);
+  font-size: 13px;
+}
+
+/* ── Gallery Lightbox ── */
+.gallery-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(0,0,0,0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.gallery-lb-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+}
+.gallery-lb-img {
+  max-width: 95vw;
+  max-height: calc(100vh - 60px);
+  object-fit: contain;
+  user-select: none;
+}
+.gallery-lb-zone {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 35%;
+  cursor: pointer;
+  z-index: 1;
+}
+.gallery-lb-zone-left { left: 0; cursor: w-resize; }
+.gallery-lb-zone-right { right: 0; cursor: e-resize; }
+.gallery-lb-bar {
+  position: absolute;
+  bottom: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(0,0,0,0.6);
+  padding: 6px 18px;
+  border-radius: 20px;
+  color: #fff;
+}
+.gallery-lb-sep { opacity: 0.3; }
+.gallery-lb-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 90px;
+  height: 4px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+  vertical-align: middle;
+}
+.gallery-lb-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+}
+.gallery-lb-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: none;
+  cursor: pointer;
+}
+.gallery-lb-interval-val {
+  font-size: 12px;
+  color: rgba(255,255,255,0.7);
+  min-width: 2.5em;
+  text-align: center;
+}
+
+
+/* ==========================================================================
+   Responsive adjustments for the new UI bits
+   ========================================================================== */
+@media (max-width: 900px) {
+  .detail-toolbar .icon-action { width: 32px; height: 32px; }
+  .icon-action svg { width: 14px; height: 14px; }
+  .manage-bar { padding: 10px 14px; gap: 6px; }
+  .manage-bar .icon-btn { padding: 0 10px; font-size: 9px; }
+}
+@media (max-width: 600px) {
+  .detail-toolbar { gap: 4px; margin-top: 14px; }
+  .detail-toolbar .icon-action { width: 34px; height: 34px; }
+  .menu-popover { min-width: 180px; }
+  .menu-item { padding: 12px 16px; font-size: 13px; }  /* bigger touch targets */
+  .manage-bar {
+    padding: 10px 12px;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .manage-bar-info { width: 100%; margin-bottom: 4px; }
+  .manage-bar .icon-btn {
+    flex: 1 1 auto;
+    padding: 8px 10px;
+    font-size: 9px;
+    height: 32px;
+  }
+  .ep-submenu-btn { width: 32px; height: 32px; }
+  .ep-submenu-btn svg { width: 16px; height: 16px; }
+  .ep-row { padding: 14px 12px; }
+  /* On phones, pin #mini-player to bottom but leave room for manage-bar */
+  .manage-bar ~ * #mini-player,
+  body:has(.manage-bar:not([hidden])) #mini-player {
+    bottom: 70px !important;
+  }
+}
+
+/* ---- LIGHT MODE extra refinements ---- */
+:root[data-theme="light"] {
+  /* Stronger outlines on panels in light mode. */
+}
+:root[data-theme="light"] .card {
+  border-width: 1px;
+  border-left-width: 2px;
+}
+:root[data-theme="light"] .card:hover {
+  border-color: #000;
+  border-left-color: #000;
+}
+:root[data-theme="light"] .mini-card,
+:root[data-theme="light"] .history-row,
+:root[data-theme="light"] .comment-row,
+:root[data-theme="light"] .stat-cell,
+:root[data-theme="light"] .health-summary,
+:root[data-theme="light"] .health-list {
+  border-color: #000;
+}
+:root[data-theme="light"] .filter-chips,
+:root[data-theme="light"] .login-tabs {
+  background: #000;
+}
+:root[data-theme="light"] .filter-chips button.active {
+  color: #000;
+  background: var(--surface);
+  font-weight: 600;
+}
+:root[data-theme="light"] .ep-sub-badge {
+  border-color: #000;
+  color: #000;
+}
+:root[data-theme="light"] .skip-intro-btn {
+  background: #fff;
+  color: #000;
+  border-color: #000;
+}
+:root[data-theme="light"] .skip-intro-btn:hover {
+  background: #000;
+  color: #fff;
+}
+:root[data-theme="light"] video::cue {
+  background: rgba(0, 0, 0, 0.8);
+  color: #ffffff;
+}
+
+/* ==========================================================================
+   SUBSYSTEM SWITCHER (video ⇄ audio)
+   ========================================================================== */
+/* Single-button video/audio toggle.
+   Clicking anywhere on the pill flips the subsystem. The accent slider
+   animates between the two halves; the non-active label stays dim, the
+   active label inverts color to match the slider. */
+.kind-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border-strong);
+  border-radius: 1px;
+  height: 28px;
+  overflow: hidden;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  isolation: isolate;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  transition: border-color 0.15s;
+}
+.kind-switch:hover { border-color: var(--accent); }
+.kind-switch:focus-visible {
+  outline: 1px solid var(--focus);
+  outline-offset: 1px;
+}
+.kind-switch .kind-slider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--accent);
+  z-index: 0;
+  transition: left 0.32s cubic-bezier(0.65, 0, 0.35, 1), width 0.32s cubic-bezier(0.65, 0, 0.35, 1);
+  pointer-events: none;
+}
+.kind-switch .kind-label {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 0 10px;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: color 0.32s cubic-bezier(0.65, 0, 0.35, 1);
+}
+.kind-switch .kind-label.active { color: var(--bg); }
+
+/* Cards grid fades in/out during kind switch */
+#cards {
+  transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+}
+#cards.cards-fading {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.filter-chips button {
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  position: relative;
+}
+.chip-hidden-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-left: 6px;
+  vertical-align: middle;
+  opacity: 0.85;
+}
+
+/* ==========================================================================
+   AUDIO PLAYER VIEW
+   ========================================================================== */
+#view-audio-player {
+  display: flex;
+  min-height: 0;
+}
+#audio-sidebar {
+  flex: 0 0 320px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-right: 1px solid var(--border-strong);
+  min-width: 0;
+}
+#audio-sidebar-title {
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#audio-episode-list {
+  flex: 1 1 auto;
+  list-style: none;
+  overflow-y: auto;
+  padding: 6px 0 14px;
+}
+#audio-main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+  /* Internal scroll fallback — when a video episode pushes hero +
+     player + controls + lyric panel taller than the viewport, scrolling
+     here keeps the controls row (sleep / SUB / loop) reachable. */
+  overflow-y: auto;
+}
+#audio-hero {
+  display: flex;
+  gap: 18px;
+  padding: 24px 32px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.audio-cover {
+  flex: 0 0 120px;
+  width: 120px;
+  height: 120px;
+  background: var(--surface-2) center/cover no-repeat;
+  border: 1px solid var(--border-strong);
+}
+#audio-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+.audio-ep-title {
+  font-size: 18px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.audio-ep-meta {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+#audio-player-wrap {
+  padding: 16px 32px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+#audio-player-wrap audio { width: 100%; }
+/* Video sibling: shown only for video episodes inside audio collections.
+   Width fits container, height capped at 70vh so portrait/tall sources
+   don't overflow the viewport. object-fit: contain centers the picture
+   inside the resulting box with letterbox bars (no crop). The element
+   is `hidden` by default — JS unhides on video episodes and re-hides
+   on audio episodes. */
+#audio-player-wrap video {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  background: #000;
+  border: 1px solid var(--border-strong);
+}
+#audio-player-wrap video[hidden] { display: none; }
+#audio-player-wrap .plyr--audio { border: 1px solid var(--border-strong); }
+
+/* Floating overlay subtitle: shows the active lyric line over the
+   playback view. Fixed-position pill, centered horizontally by default,
+   anchored above the bottom edge so it doesn't fight the audio mini
+   player. The user can drag it anywhere on screen and resize it via
+   the bottom-right grip; both position and size are persisted to
+   localStorage. Single lines wrap onto multiple visual rows via
+   word-break: break-word so long captions are never clipped. */
+.audio-fsub {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  width: min(90%, 1000px);
+  min-width: 160px;
+  max-width: 100vw;
+  min-height: 44px;
+  max-height: 80vh;
+  padding: 12px 24px;
+  background: rgba(8, 12, 18, 0.82);
+  color: #f4f7fb;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  line-height: 1.4;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  word-break: break-word;
+  white-space: pre-wrap;
+  z-index: 9020;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45);
+  cursor: grab;
+  user-select: none;
+  /* Stop the browser from claiming touch-drag for scroll / pull-to-
+     refresh / pinch-zoom. Without this, mobile pointermove gets
+     cancelled after a few pixels because Chrome decides the user is
+     scrolling instead of dragging. Mouse drag is unaffected. */
+  touch-action: none;
+  /* Native CSS resize handle (bottom-right corner). The ::-webkit-resizer
+     pseudo below gives it a visible glyph so the user can find it. */
+  resize: both;
+  overflow: auto;
+  /* inline-size container (NOT `size`) — size containment requires an
+     explicit block height, and without one the pill collapses to its
+     min-height while child cqh queries return zero. inline-size only
+     needs an explicit width (we have one) and lets cqi units measure
+     the pill's current width, which is what drives the auto-scaling
+     font below. */
+  container-type: inline-size;
+  container-name: fsub;
+  /* Fallback font-size for clients without container query support. */
+  font-size: 18px;
+}
+.audio-fsub.dragging { cursor: grabbing; }
+.audio-fsub[hidden] { display: none; }
+/* Visual glyph for the native resize grip — diagonal hatching on a
+   subtle bg so the user can spot the corner. */
+.audio-fsub::-webkit-resizer {
+  background:
+    linear-gradient(135deg, transparent 0 45%, rgba(255,255,255,0.55) 45% 55%, transparent 55% 70%, rgba(255,255,255,0.55) 70% 80%, transparent 80%);
+  border-radius: 0 0 10px 0;
+}
+/* Auto-scaling text: font-size tracks the pill's current width
+   (clamped at [13, 64]px). When the user drags the pill bigger the
+   number after `cqi` grows, when smaller it shrinks. cqi = 1% of the
+   container's inline (width) dimension. */
+.audio-fsub #audio-fsub-text {
+  font-size: clamp(13px, 4.6cqi, 64px);
+  display: inline-block;
+}
+#audio-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 32px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+#audio-controls-row .icon-btn { font-size: 10px; }
+#audio-sleep-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+#audio-sleep-btn svg { width: 12px; height: 12px; }
+#audio-sleep-btn.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+@keyframes sleepPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+#audio-sleep-btn.urgent {
+  color: var(--danger, #ff5c5c);
+  border-color: var(--danger, #ff5c5c);
+  animation: sleepPulse 1s ease-in-out infinite;
+}
+#audio-sleep-btn.waiting {
+  color: var(--accent);
+  border-color: var(--accent);
+  animation: sleepPulse 1.8s ease-in-out infinite;
+}
+
+/* Lyric panel */
+.lyric-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 32px 60px;
+  scroll-behavior: smooth;
+  position: relative;
+}
+.lyric-empty {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  padding: 40px 0;
+  letter-spacing: 2px;
+}
+.lyric-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lyric-line {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  text-align: center;
+  cursor: pointer;
+  transition: color 0.25s, transform 0.25s, font-size 0.25s;
+  padding: 3px 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.lyric-line:hover { color: var(--text); }
+.lyric-line.active {
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 600;
+}
+.lyric-line.static {
+  cursor: default;
+  text-align: left;
+}
+.lyric-line.static:hover { color: var(--text-dim); }
+
+/* Sleep timer popover */
+#sleep-popover {
+  position: fixed;
+  z-index: 210;
+  min-width: 260px;
+  padding: 10px 0;
+}
+.sleep-section { padding: 8px 16px; }
+.sleep-section .section-label { margin-bottom: 8px; font-size: 9px; }
+.sleep-presets {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.sleep-presets button {
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
+  padding: 8px 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.sleep-presets button:hover {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.sleep-presets button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.sleep-custom {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.sleep-custom input {
+  flex: 1 1 auto;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.sleep-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 11px;
+  cursor: pointer;
+}
+.sleep-mode input { accent-color: var(--accent); }
+
+/* Responsive: stack audio player on narrow screens */
+@media (max-width: 900px) {
+  #view-audio-player { flex-direction: column; }
+  #audio-sidebar {
+    flex: 0 0 auto;
+    max-height: 32vh;
+    order: 2;
+    border-right: none;
+    border-top: 1px solid var(--border-strong);
+  }
+  #audio-main { order: 1; }
+  #audio-hero { padding: 16px 18px 12px; }
+  #audio-player-wrap { padding: 12px 18px; }
+  #audio-controls-row { padding: 8px 18px; }
+  .lyric-panel { padding: 16px 18px 40px; }
+}
+@media (max-width: 600px) {
+  .kind-switch { height: 26px; }
+  .kind-switch .kind-btn { padding: 0 10px; font-size: 9px; }
+  .audio-cover { flex: 0 0 80px; width: 80px; height: 80px; }
+  .audio-ep-title { font-size: 15px; }
+}
+
+/* ==========================================================================
+   Mobile audio player stage (≤600px)
+
+   On phone we replace the desktop hero / Plyr / controls / sidebar /
+   lyric panel with a streaming-app-style layout: dominant cover, big
+   title block, custom range progress, large play button, secondary
+   action row. The existing desktop DOM is hidden but stays in the tree
+   so JS bindings (state.audioPlyr, audioLoopBtn, etc.) keep working.
+   ========================================================================== */
+.amst { display: none; }  /* desktop: hidden entirely */
+
+@media (max-width: 600px) {
+  /* Hide desktop pieces on mobile; the stage takes over. */
+  #audio-hero,
+  #audio-player-wrap,
+  #audio-controls-row { display: none !important; }
+  /* Final overflow guard — even with min-width:0 down the chain, some
+     ancestor weirdness (e.g. lib-managed audio mini layout side effect)
+     can leak. Clip horizontally at the audio main column. */
+  #audio-main { overflow-x: hidden; min-width: 0; }
+  #view-audio-player { overflow-x: hidden; min-width: 0; max-width: 100vw; }
+  #audio-sidebar {
+    /* Will be turned into a bottom sheet by .amst-sheet-active. Hide
+       in default state — the queue button reveals it on demand. */
+    display: none;
+  }
+  #audio-sidebar.amst-sheet-active {
+    display: flex;
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    max-height: 60vh;
+    height: 60vh;
+    z-index: 9001;
+    background: var(--surface);
+    border-top: 1px solid var(--border-strong);
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
+    transform: translateY(100%);
+    animation: amstSheetIn 0.22s ease-out forwards;
+    border-radius: 14px 14px 0 0;
+    padding-top: 18px;  /* room for handle */
+  }
+  /* Drag handle pseudo-element for the queue sheet */
+  #audio-sidebar.amst-sheet-active::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+  @keyframes amstSheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+  /* Lyric panel: in default mobile state, hidden. Becomes a full-screen
+     overlay when 歌词 button toggles .amst-lyric-active. */
+  #audio-lyric-panel { display: none; }
+  #audio-lyric-panel.amst-lyric-active {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 9012;
+    background: transparent;
+    padding: 80px 24px 60px;
+    overflow-y: auto;
+  }
+  #audio-lyric-panel.amst-lyric-active .lyric-list {
+    text-align: center;
+  }
+  #audio-lyric-panel.amst-lyric-active .lyric-list li {
+    font-size: 16px;
+    padding: 10px 6px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+  #audio-lyric-panel.amst-lyric-active .lyric-list li.active {
+    color: #fff;
+    font-size: 19px;
+    font-weight: 600;
+  }
+
+  /* The stage itself. min-width:0 + max-width:100% kills horizontal
+     overflow when a child has white-space:nowrap (intrinsic min-content
+     = full title width). Flex items default min-width:auto, which would
+     let a long unbreakable title (e.g. Japanese song name with ↑↑) push
+     the parent past viewport width. Defensive: also clip overflow-x. */
+  .amst {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 0;
+    padding: 12px 16px 16px;
+    gap: 14px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .amst > * { min-width: 0; max-width: 100%; }
+  .amst-cover-frame {
+    width: 100%;
+    max-width: 70vmin;
+    aspect-ratio: 1 / 1;
+    margin: 8px auto 4px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .amst-cover {
+    width: 100%;
+    height: 100%;
+    background: var(--surface-2) center/cover no-repeat;
+  }
+  /* Video episode in audio collection on mobile: replace the square
+     cover with a video surface that adapts to the source aspect ratio.
+     JS toggles .has-video on the frame and unhides #amst-video; the
+     1:1 aspect-ratio is dropped so 16:9 / 9:16 sources don't get
+     letterboxed inside a square. max-height keeps tall portrait
+     sources from dominating the viewport. */
+  .amst-cover-frame.has-video {
+    aspect-ratio: auto;
+    max-width: 100%;
+    max-height: 45vh;
+  }
+  #amst-video {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-height: 45vh;
+    object-fit: contain;
+    background: #000;
+  }
+  /* Aux row holds 「悬浮」 + the other secondary buttons. flex-shrink:0
+     ensures it never gets squeezed off-screen when the cover-frame
+     opens up to its has-video max-height. */
+  .amst-main-row, .amst-aux-row { flex-shrink: 0; }
+  #amst-video[hidden] { display: none; }
+  /* Desktop's video element never appears on mobile — the mobile
+     amst-video sibling owns video playback inside .amst. */
+  #audio-player-video { display: none !important; }
+  /* Floating subtitle on mobile: narrower padding + bottom offset
+     above the amst aux row. Font size is driven by container queries
+     on the inner span (see desktop rules), so no override here. */
+  .audio-fsub {
+    bottom: 200px;
+    max-width: 92%;
+    padding: 10px 14px;
+    border-radius: 8px;
+  }
+  .amst-titles {
+    text-align: center;
+    padding: 6px 8px;
+    min-width: 0;
+    max-width: 100%;
+  }
+  /* Each line is its own block with explicit width:100% + min-width:0,
+     so white-space:nowrap can clip via text-overflow without forcing
+     the parent to grow. */
+  .amst-title,
+  .amst-artist,
+  .amst-collection {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .amst-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .amst-artist {
+    margin-top: 4px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  .amst-collection {
+    margin-top: 4px;
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .amst-progress {
+    padding: 0 6px;
+  }
+  .amst-seek {
+    width: 100%;
+    height: 28px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  .amst-seek::-webkit-slider-runnable-track {
+    height: 4px;
+    background: linear-gradient(to right, var(--accent) var(--amst-fill, 0%), var(--border) var(--amst-fill, 0%));
+    border-radius: 2px;
+  }
+  .amst-seek::-moz-range-track {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+  }
+  .amst-seek::-moz-range-progress {
+    height: 4px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .amst-seek::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-top: -5px;
+    box-shadow: 0 0 0 4px transparent;
+    transition: box-shadow 0.15s;
+  }
+  .amst-seek:active::-webkit-slider-thumb,
+  .amst-seek:focus::-webkit-slider-thumb {
+    box-shadow: 0 0 0 6px rgba(var(--accent-rgb, 0, 196, 180), 0.2);
+  }
+  .amst-seek::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .amst-time-row {
+    display: flex;
+    justify-content: space-between;
+    color: var(--text-dim);
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+  .amst-main-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 4px 4px;
+    gap: 8px;
+  }
+  .amst-aux-row {
+    display: flex;
+    justify-content: space-around;
+    padding: 4px 4px 8px;
+    gap: 6px;
+  }
+  .amst-side-btn,
+  .amst-aux-btn {
+    background: none;
+    border: none;
+    color: var(--text);
+    cursor: pointer;
+    padding: 8px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    min-width: 44px;
+  }
+  .amst-aux-btn { color: var(--text-dim); }
+  .amst-side-btn svg { width: 30px; height: 30px; }
+  .amst-aux-btn svg { width: 20px; height: 20px; }
+  .amst-aux-btn:hover,
+  .amst-side-btn:hover { color: var(--accent); }
+  .amst-aux-btn.active { color: var(--accent); }
+  .amst-aux-btn.active svg { fill: var(--accent); stroke: var(--accent); }
+  .amst-aux-label {
+    font-size: 9px;
+    letter-spacing: 0.5px;
+  }
+  .amst-loop-badge {
+    position: absolute;
+    background: var(--accent);
+    color: var(--bg);
+    font-size: 8px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    transform: translate(14px, -10px);
+  }
+  .amst-aux-btn { position: relative; }
+  .amst-play-btn {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 6px 20px rgba(var(--accent-rgb, 0, 196, 180), 0.35);
+    transition: transform 0.1s;
+  }
+  .amst-play-btn:active { transform: scale(0.95); }
+  .amst-play-btn svg { width: 28px; height: 28px; }
+
+  /* Mask shared by lyric-overlay (full screen, blur+tint) and
+     queue-sheet (dim backdrop). Each has its own variant class. */
+  .amst-mask {
+    position: fixed;
+    inset: 0;
+    z-index: 9000;
+  }
+  .amst-mask-dim {
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 9000;
+  }
+  .amst-mask-bg {
+    position: absolute;
+    inset: -40px;
+    background: var(--amst-cover-url, none) center/cover no-repeat;
+    filter: blur(40px) brightness(0.35);
+    transform: scale(1.1);
+  }
+  .amst-mask-tint {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0.7));
+  }
+  /* Close button is a top-level sibling of the mask + lyric panel so
+     its z-index isn't trapped inside the mask's stacking context.
+     Hoisted to 9100 — above lyric panel's 9012 — so taps actually
+     land on it. position:fixed anchors it to the viewport corner. */
+  .amst-mask-close {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    font-size: 22px;
+    line-height: 32px;
+    cursor: pointer;
+    z-index: 9100;
+    padding: 0;
+    text-align: center;
+  }
+}
+
+/* ==========================================================================
+   Admin-only UI — hidden when not logged in as admin
+   ========================================================================== */
+:root:not([data-role="admin"]) .admin-only { display: none !important; }
+
+/* Granular per-action permissions. Each `.perm-<name>` button is hidden
+   unless the document has data-perm-<name> set, which updateHeaderAuth()
+   in app.js mirrors from state.user.permissions (admin always grants
+   all four). Using `:not([data-perm-X])` lets a single CSS rule work
+   for every role: guest / user-without-grant / user-with-grant / admin. */
+:root:not([data-perm-upload]) .perm-upload { display: none !important; }
+:root:not([data-perm-create]) .perm-create { display: none !important; }
+:root:not([data-perm-modify]) .perm-modify { display: none !important; }
+:root:not([data-perm-delete]) .perm-delete { display: none !important; }
+
+/* ==========================================================================
+   Category editor (admin panel)
+   ========================================================================== */
+.category-editor .section-label { margin-bottom: 12px; }
+.cat-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.cat-section-header .cat-sort-btn {
+  margin-left: auto;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 9px;
+  opacity: 0.7;
+}
+.cat-section-header .cat-sort-btn:hover { opacity: 1; }
+/* ---- 1.7.0 chip-layer model (replaces nested UL editor + drag-drop) ---- */
+/* Toolbar above all category editors: live filter + import / export. */
+.cat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.cat-toolbar-sep {
+  color: var(--text-dim);
+  opacity: 0.4;
+  font-size: 10px;
+  user-select: none;
+}
+.cat-filter-input {
+  flex: 1 1 240px;
+  min-width: 180px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+/* Sort-direction toggle (home toolbar): SVG inside has no width/height,
+   and there's no .icon-btn svg { ... } default rule, so without an
+   explicit size the browser collapses the SVG to 0 in inline-flex
+   contexts on some engines. Lock it down here (orphaned from the old
+   editor block — leave in place since other home-toolbar selectors
+   coexist on the same selectors). */
+#sort-dir-btn { padding: 0 8px; min-width: 28px; }
+#sort-dir-btn svg { width: 14px; height: 14px; display: block; }
+#home-bulk-btn span[data-icon] svg,
+#home-audio-upload-btn span[data-icon] svg { width: 14px; height: 14px; display: block; }
+
+/* Layer stack: one .cat-layer-row per visible depth. Rows are
+   horizontally scrollable so chip count never wraps and never inflates
+   the editor's height. Indent + left-border thicken each level so the
+   eye reads the parent / child relationship at a glance. Mirrors the
+   .filter-sub-row pattern from the home filter chip stack but visually
+   beefed up since admin rows do double duty as "click to enter edit". */
+.cat-layer-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+.cat-layer-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  align-items: center;
+  padding: 6px 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left-width: 3px;
+  border-left-color: var(--border-strong);
+  scrollbar-width: thin;
+}
+.cat-layer-row[data-layer="2"] { margin-left: 14px; border-left-color: var(--accent-dim, var(--accent)); }
+.cat-layer-row[data-layer="3"] { margin-left: 28px; border-left-color: var(--accent); border-left-width: 4px; }
+.cat-layer-row[data-layer="4"] { margin-left: 42px; border-left-color: var(--accent); border-left-width: 5px; }
+.cat-layer-row[data-layer="5"] { margin-left: 56px; border-left-color: var(--accent); border-left-width: 6px; }
+.cat-chip {
+  appearance: none;
+  background: var(--bg);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.cat-chip:hover { color: var(--text); border-color: var(--accent-dim, var(--accent)); }
+.cat-chip.active {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--text);
+  border-color: var(--accent-dim, var(--accent));
+}
+.cat-chip.editing {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.cat-chip-hidden-dot {
+  font-size: 8px;
+  color: var(--accent);
+  margin-left: 2px;
+  vertical-align: middle;
+}
+.cat-chip.editing .cat-chip-hidden-dot { color: var(--bg); }
+.cat-chip-add {
+  appearance: none;
+  background: var(--bg);
+  color: var(--accent);
+  border: 1px dashed var(--accent);
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+.cat-chip-add:hover { background: color-mix(in srgb, var(--accent) 14%, var(--bg)); }
+
+/* Inline edit panel — surfaced when catActiveEditId resolves to a chip.
+   Sits directly below the layer stack (no modal), so editing context is
+   always visually attached to the chip the admin most recently clicked. */
+.cat-edit-panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.cat-edit-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cat-edit-title {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: bold;
+}
+.cat-edit-id {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+.cat-edit-close {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 4px 10px;
+}
+.cat-edit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cat-edit-fields .field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cat-edit-fields .field > span {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+.cat-edit-fields input[type="text"],
+.cat-edit-fields select {
+  padding: 6px 10px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  font-size: 12px;
+  font-family: inherit;
+}
+.cat-edit-hidden-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.cat-edit-hidden-row input { accent-color: var(--accent); width: auto; }
+.cat-edit-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.cat-edit-actions .cat-edit-promote-top,
+.cat-edit-actions .cat-edit-add-child {
+  font-size: 10px;
+  padding: 4px 10px;
+}
+.cat-edit-actions .cat-edit-promote-top {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.cat-edit-actions .cat-edit-delete {
+  margin-left: auto;
+  background: transparent;
+  color: var(--text-dim);
+  border: 1px solid var(--border-strong);
+  padding: 4px 14px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.cat-edit-actions .cat-edit-delete:hover {
+  color: var(--danger, #ff5c5c);
+  border-color: var(--danger, #ff5c5c);
+}
+.cat-edit-actions .cat-edit-delete[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.cat-edit-keywords-block {
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.cat-edit-keywords-block .cat-kw-label {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.cat-kw-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cat-edit-keywords-block .cat-kw-input {
+  flex: 1 1 auto;
+  min-width: 120px;
+  font-size: 11px;
+  padding: 4px 8px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-family: inherit;
+}
+
+/* Empty hint shown when no chip is in active editing mode */
+.cat-edit-empty {
+  font-size: 11px;
+  color: var(--text-muted, var(--text-dim));
+  padding: 14px 16px;
+  border: 1px dashed var(--border);
+  background: var(--surface);
+  text-align: center;
+  letter-spacing: 0.05em;
+}
+
+/* Flat search-results panel (active when cat-filter-input has a query).
+   Replaces the old applyCatFilter "hide non-matches in nested tree"
+   approach — the chip-layer view is hidden entirely while filter is
+   active, and a click-to-jump path list takes over. */
+.cat-search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cat-search-results .cat-search-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text);
+}
+.cat-search-results .cat-search-item:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.cat-search-results .path-label {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cat-search-results .kind-tag {
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+.cat-search-empty {
+  padding: 14px 16px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  border: 1px dashed var(--border);
+  background: var(--surface);
+}
+.category-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.category-actions .btn-primary { width: auto; padding: 10px 22px; }
+#cat-save-status { font-size: 10px; color: var(--text-dim); }
+#cat-save-status.ok { color: var(--accent); }
+#cat-save-status.error { color: var(--danger, #ff5c5c); }
+
+/* Per-category keywords editor (smart-tagging vocabulary). 1.7.0 moved
+   the keyword UI into the .cat-edit-keywords-block inside the inline
+   edit panel; chip / del-button styles are now selector-prefix-free
+   so the same markup works in any future container. */
+.cat-kw-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.cat-kw-chip .cat-kw-del {
+  appearance: none;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+}
+.cat-kw-chip .cat-kw-del:hover { color: var(--danger, #ff5c5c); }
+
+/* Auto-detected type chip in the create dialog */
+.type-chip-cb.type-chip-auto > span::after {
+  content: ' • 自动';
+  font-size: 9px;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+}
+
+/* Category-tab sub-tabs (one button per kind). Keeps the four trees
+   isolated so admins don't scroll a combined list through hundreds of
+   entries. Style mirrors .dup-kind-btn for visual consistency with the
+   other admin sub-tabs. */
+.cat-kind-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 14px 0 10px;
+}
+.cat-kind-tab {
+  appearance: none;
+  background: var(--bg);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cat-kind-tab.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+/* Duplicate-check tab */
+.dup-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin-bottom: 18px;
+}
+.dup-kinds { display: flex; gap: 6px; flex-wrap: wrap; }
+.dup-kind-btn {
+  appearance: none;
+  background: var(--bg);
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.dup-kind-btn.active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+.dup-modes { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; }
+.dup-modes .radio { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.dup-threshold-row .field { display: flex; flex-direction: column; gap: 6px; }
+.dup-threshold-row input[type="range"] { width: 100%; max-width: 360px; }
+#dup-threshold-out { color: var(--accent); font-size: 12px; }
+.dup-actions { display: flex; gap: 12px; align-items: center; }
+#dup-status { font-size: 10px; color: var(--text-dim); }
+#dup-status.ok { color: var(--accent); }
+#dup-status.error { color: var(--danger, #ff5c5c); }
+.dup-results { display: flex; flex-direction: column; gap: 18px; }
+.dup-group { border: 1px solid var(--border); background: var(--surface); }
+.dup-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.dup-group-title { font-size: 11px; letter-spacing: 0.08em; color: var(--text-dim); }
+.dup-group-score { font-size: 11px; color: var(--accent); }
+.dup-table { margin: 0; }
+.dup-table .dup-types { display: flex; flex-wrap: wrap; gap: 4px; }
+.dup-table .dup-type {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.dup-table .dup-tag {
+  display: inline-block;
+  padding: 1px 5px;
+  font-size: 9px;
+  color: var(--danger, #ff5c5c);
+  border: 1px solid var(--danger, #ff5c5c);
+  margin-left: 4px;
+}
+.dup-row-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.dup-row-actions .icon-btn { font-size: 9px; padding: 4px 10px; }
+.dup-table .dup-pick { width: 28px; text-align: center; }
+.dup-table .dup-pick input { cursor: pointer; }
+
+/* Whitelist dialog */
+.dup-whitelist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+.dup-wl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+.dup-wl-pair {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex: 1 1 auto;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+.dup-wl-vs { color: var(--accent); font-size: 13px; }
+.dup-wl-dead { color: var(--text-dim); font-style: italic; }
+.dup-wl-remove { font-size: 9px; padding: 4px 10px; flex-shrink: 0; }
+
+/* Visible-categories dialog */
+.vc-body { display: flex; flex-direction: column; gap: 16px; max-height: 60vh; overflow-y: auto; padding-right: 8px; }
+.vc-section .section-label { margin-bottom: 8px; }
+.vc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin-bottom: 4px;
+}
+.vc-row:hover { border-color: var(--border-strong); }
+.vc-row input[type="checkbox"] { accent-color: var(--accent); }
+.vc-row .vc-id { margin-left: auto; font-size: 10px; color: var(--text-dim); }
+.vc-row[data-depth="1"] { margin-left: 18px; }
+.vc-row[data-depth="2"] { margin-left: 36px; }
+.vc-row[data-depth="3"] { margin-left: 54px; }
+.vc-row[data-depth="4"] { margin-left: 72px; }
+.vc-indent { color: var(--text-dim); margin-right: 4px; user-select: none; font-family: var(--font-mono); }
+.admin-user-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* ── Video frame picker in cover dialog ── */
+.cover-frame-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+.cover-frame-controls select { flex: 1 1 auto; min-width: 0; }
+.cover-frame-video {
+  width: 100%;
+  max-height: 360px;
+  background: #000;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  display: block;
+}
+
+/* ==========================================================================
+   Subtitle font size — scales both native <track> cues and Plyr captions
+   ========================================================================== */
+/**
+ * @brief Subtitle font-size scale.
+ *
+ * Driven by the `--sub-scale` CSS custom property (a unit-less
+ * multiplier; default 1). The slider in the "+ 字幕" dialog writes
+ * a continuous value (0.5 → 2.5, step 0.1) directly to that
+ * property; the legacy `data-sub-size` cycle in the settings menu
+ * snaps to a coarse 5-stop ladder by writing the same property.
+ *
+ * Both `<video>::cue` (native subtitles) and `.plyr__caption`
+ * (Plyr's overlay element) honor the multiplier, so the user-
+ * picked scale tracks regardless of which renderer the browser
+ * picked for a given track.
+ *
+ * The legacy `data-sub-size` attribute selectors below preserve
+ * backwards compatibility with localStorage values shipped before
+ * 1.7.14 — old `'small' / 'medium' / 'large'` keys still set a
+ * sensible scale on first paint, before app.js boots and replaces
+ * them with the real `--sub-scale` value.
+ */
+:root { --sub-scale: 1; }
+:root[data-sub-size="small"]  { --sub-scale: 0.75; }
+:root[data-sub-size="medium"] { --sub-scale: 1; }
+:root[data-sub-size="large"]  { --sub-scale: 1.4; }
+video::cue        { font-size: calc(1em * var(--sub-scale)); }
+.plyr__caption    { font-size: calc(1em * var(--sub-scale)) !important; }
+
+/* ==========================================================================
+   MOBILE ADAPTATIONS — new subsystem features (image / gallery / likes / etc)
+   ========================================================================== */
+
+/* ---- TABLET (≤ 900px) ---- */
+@media (max-width: 900px) {
+  /* Gallery grid: smaller thumbnails */
+  .gallery-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 6px;
+    padding: 8px;
+  }
+  /* Lightbox bar: tighter spacing */
+  .gallery-lb-bar { gap: 8px; padding: 6px 14px; font-size: 11px; }
+  .gallery-lb-slider { width: 70px; }
+  /* Category editor: narrower id column */
+  .category-list .cat-id { flex: 0 0 100px; }
+  .category-add-row .cat-add-id { flex: 0 0 100px; }
+  /* Bulk collection bar */
+  .bulk-col-bar { padding: 10px 14px; gap: 10px; }
+  .bulk-col-bar-actions button { min-width: 60px; }
+}
+
+/* ---- PHONE (≤ 600px) ---- */
+@media (max-width: 600px) {
+  /* Gallery grid: 3 columns on phone */
+  .gallery-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    padding: 6px;
+  }
+  #episode-list.gallery-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .gallery-more { font-size: 1.1rem; }
+
+  /* Gallery lightbox: wrap bar into 2 rows */
+  .gallery-lb-bar {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 10px;
+    padding: 8px 12px;
+    bottom: 6px;
+    border-radius: 14px;
+    max-width: calc(100vw - 24px);
+  }
+  .gallery-lb-sep { display: none; }
+  .gallery-lb-bar .icon-btn { min-width: 36px; height: 36px; font-size: 14px; }
+  .gallery-lb-slider { width: 80px; height: 6px; }
+  .gallery-lb-slider::-webkit-slider-thumb { width: 20px; height: 20px; }
+  .gallery-lb-slider::-moz-range-thumb { width: 20px; height: 20px; }
+  .gallery-lb-img { max-width: 100vw; max-height: calc(100vh - 90px); }
+  /* Lightbox click zones: widen for easier tapping */
+  .gallery-lb-zone { width: 40%; }
+
+  /* Play-all bar: wrap on narrow screens */
+  .play-all-bar {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .play-all-bar .btn-primary,
+  .play-all-bar .btn-secondary {
+    padding: 8px 12px;
+    font-size: 10px;
+  }
+  .liked-hidden-switch { margin-left: 0; }
+
+  /* Home tracklist: bigger touch targets */
+  .home-tracklist { max-height: 260px; }
+  .home-tracklist li { padding: 8px 10px; font-size: 12px; min-height: 36px; }
+  .home-tracklist .tl-col { display: none; }
+
+  /* Play mode switches: bigger for touch */
+  .play-switch-track { width: 32px; height: 16px; border-radius: 8px; }
+  .play-switch-track::after { width: 12px; height: 12px; }
+  .play-switch input:checked + .play-switch-track::after { transform: translateX(16px); }
+  .play-switch-label { font-size: 9px; }
+
+  /* Episode sort bar */
+  .ep-sort-bar { padding: 8px 10px; }
+  .ep-sort-select { font-size: 12px; padding: 6px 8px; }
+  .ep-sort-dir-btn { width: 32px; height: 32px; font-size: 14px; }
+
+  /* Kind switch: ensure readable on phone */
+  .kind-switch .kind-label { min-width: 36px; padding: 0 8px; }
+
+  /* Bulk collection bar: full width on phone */
+  .bulk-col-bar {
+    left: 6px;
+    right: 6px;
+    top: 6px;
+    transform: none;
+    padding: 10px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .bulk-col-bar-info { width: 100%; font-size: 10px; }
+  .bulk-col-bar-actions { width: 100%; }
+  .bulk-col-bar-actions button { flex: 1 1 auto; min-width: 0; }
+
+  /* Category editor: stack on phone */
+  .category-list li {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+  .category-list .cat-id { flex: 0 0 100%; font-size: 9px; }
+  .category-list .cat-label-input { flex: 1 1 auto; min-width: 0; }
+  .category-add-row {
+    flex-wrap: wrap;
+  }
+  .category-add-row .cat-add-id { flex: 1 1 100%; }
+  .category-add-row .cat-add-label { flex: 1 1 auto; }
+  .category-actions { flex-wrap: wrap; gap: 8px; }
+
+  /* ── Plyr mobile: hide volume slider (phones use hardware volume) ── */
+  .plyr__volume { display: none !important; }
+
+  /* Audio player mobile layout */
+  #audio-player-wrap { padding: 10px; }
+  #audio-controls-row { gap: 6px; padding: 8px 10px; flex-wrap: wrap; justify-content: center; }
+  #audio-hero { padding: 14px 10px 10px; gap: 12px; }
+  .lyric-panel { font-size: 13px; padding: 12px 14px 30px; }
+
+  /* View gallery: full bleed */
+  #view-gallery { padding: 0; }
+}
+
+/* ---- NARROW PHONE (≤ 380px) ---- */
+@media (max-width: 380px) {
+  .gallery-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  #episode-list.gallery-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .gallery-lb-bar { padding: 6px 8px; gap: 4px 8px; }
+  .play-all-bar .btn-primary,
+  .play-all-bar .btn-secondary { flex: 1 1 auto; }
+  .kind-switch .kind-label { min-width: 30px; padding: 0 6px; font-size: 8px; }
+  .category-list .cat-del { padding: 4px 8px; }
+}
+
+/* ============================================================
+ * Per-collection transcode picker (v1.10.0+)
+ *
+ * Modal opened by the collection-card transcode button. Lists
+ * every .mkv in the collection with its current HLS cache state
+ * (cached / cached-partial / queued / running / none). Selectable
+ * rows have a checkbox; queued and running rows are non-
+ * interactive (disabled-look). Cached rows imply re-transcode
+ * intent and trigger a confirm prompt at submit time.
+ *
+ * Tokens used: --border, --border-strong, --surface, --hover,
+ *   --bg-deep (falls back to --bg via cascade), --text, --text-dim,
+ *   --accent, --success, --danger, --font-mono. No --warning
+ *   exists in either theme — we reuse --danger for the partial-
+ *   cache amber/red marker since semantically it's "incomplete +
+ *   need attention" which lines up with the danger palette better
+ *   than success/accent.
+ * ============================================================ */
+.transcode-modal { width: min(92vw, 760px); }
+/**
+ * @brief Inline warning banner shown at the top of the transcode
+ *        picker dialog.
+ *
+ * Pre-1.10.1 the dialog opened with no guidance, so users
+ * occasionally re-transcoded files that already played back fine
+ * (wasting NAS CPU and cache). This banner makes the "only for
+ * broken audio" intent visible every time the dialog opens. Styled
+ * as a soft warning — yellow/amber tint, dashed left edge — not an
+ * error since the action itself is reversible.
+ */
+.transcode-warning {
+  margin: 8px 0 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--warning, #b58900);
+  border-left-width: 3px;
+  border-radius: 4px;
+  background: rgba(181, 137, 0, 0.10);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.transcode-warning b { color: var(--warning, #b58900); }
+.transcode-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.transcode-toolbar .transcode-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.transcode-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+.transcode-list-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.transcode-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto auto;
+  align-items: center;
+  column-gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12px;
+  cursor: pointer;
+}
+.transcode-row:hover { border-color: var(--border-strong); background: var(--hover); }
+.transcode-row.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.transcode-row.disabled:hover { background: var(--surface); border-color: var(--border); }
+.transcode-row input[type="checkbox"] { accent-color: var(--accent); cursor: inherit; }
+.transcode-row-name {
+  overflow: hidden;
+  min-width: 0;
+}
+.transcode-row-name .row-name-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.transcode-row-name .row-path {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+}
+.transcode-row-status {
+  font-size: 10px;
+  padding: 2px 8px;
+  border: 1px solid currentColor;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+.transcode-row-status[data-st="cached"] { color: var(--success); }
+.transcode-row-status[data-st="cached-partial"] { color: var(--danger); }
+.transcode-row-status[data-st="queued"] { color: var(--accent); }
+.transcode-row-status[data-st="running"] { color: var(--focus); }
+.transcode-row-status[data-st="none"] { color: var(--text-dim); }
+.transcode-row-size {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  min-width: 64px;
+  text-align: right;
+}
+@media (max-width: 600px) {
+  .transcode-row {
+    grid-template-columns: 22px 1fr auto;
+    row-gap: 4px;
+  }
+  .transcode-row-size {
+    grid-column: 2 / 4;
+    text-align: left;
+    min-width: 0;
+  }
+}

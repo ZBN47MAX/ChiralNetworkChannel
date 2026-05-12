@@ -1,0 +1,104 @@
+/**
+ * @file dark.css
+ * @brief Dark "cold HUD wireframe" — DS124's default theme.
+ *
+ * Defines the full CSS-variable palette consumed by every component
+ * when `:root[data-theme="dark"]` is active. The bare `:root` selector
+ * shares the same definitions so a first-paint with no localStorage
+ * (and therefore no `data-theme` attribute) still renders in dark
+ * mode — i.e. graceful degradation.
+ *
+ * @section AddingNewThemes Adding a new theme
+ *   1. Copy this file to `style/<id>.css`.
+ *   2. Replace the selector with `:root[data-theme="<id>"]` (no bare
+ *      `:root` — only `dark.css` claims the no-attr default).
+ *   3. Override every listed variable — keep names identical or
+ *      components fall back to whatever was last cascaded.
+ *   4. Add `<link rel="stylesheet" href="style/<id>.css">` in
+ *      `index.html` and an `<option value="<id>">` inside
+ *      `#theme-select`.
+ *   5. Add the `header.theme.<id>` key to every locale file under
+ *      `language/`.
+ *
+ * @section VariableContract Variable contract
+ *   - `--bg`, `--surface`, `--surface-2`, `--hover`, `--active`
+ *     stacked surface colors (page bg → panel → lifted panel → row
+ *     hover → row active).
+ *   - `--border`, `--border-strong`
+ *     outline / wireframe weights (faint vs emphasis).
+ *   - `--text`, `--text-dim`, `--text-faint`
+ *     foreground hierarchy (body → secondary → tertiary).
+ *   - `--accent`, `--accent-dim`, `--focus`
+ *     highlight (active chip / link / brand) + focus ring.
+ *   - `--danger`, `--success`
+ *     status colors (error toast / disabled state vs success toast).
+ *   - `--scrim-deep`, `--scrim-mid`, `--scrim-light`
+ *     dialog / backdrop fills (denser → sparser).
+ *   - `--panel-shadow`
+ *     composite drop-shadow used by `.dialog` / lifted panels.
+ *
+ * @section Authoring Authoring style
+ *   This file is loaded VIA `<link>` from `index.html` separately from
+ *   the main `style.css`. Keep it lean — only the variable block.
+ *   Component layout / spacing belong in `style.css`. A new theme
+ *   should not need to touch component CSS, only swap the values
+ *   here.
+ */
+
+/**
+ * @brief Variable palette — dark theme + no-attribute default.
+ *
+ * The `:root` selector (no attribute) makes dark the implicit default
+ * before any theme is selected. The `:root[data-theme="dark"]`
+ * selector handles the explicit case (set by `applyTheme('dark')`
+ * after the user chose dark, or restored from `ds124:theme` LS).
+ */
+:root,
+:root[data-theme="dark"] {
+  /* Display name — read by `app.js` at boot via getComputedStyle to
+     populate the matching `<option>` label in `#theme-select`. The
+     value is wrapped in literal quotes (CSS string syntax) and
+     unquoted by the JS reader. Whatever you write here is what the
+     dropdown shows in EVERY locale; theme names are no longer
+     translated through `language/*.json`.
+     Recommended max length: ~12 characters (fits the dropdown on
+     a 320px-wide mobile viewport without horizontal scroll). */
+  --theme-name:    "Dark";
+
+  /* Surfaces — slightly lifted at each tier for panel separation. */
+  --bg:            #05080c;
+  --surface:       #0b121a;
+  --surface-2:     #121c27;
+  --hover:         #182535;
+  --active:        #1f3042;
+
+  /* Borders — bright enough to read as a wireframe at small weights. */
+  --border:        #243545;
+  --border-strong: #3a5166;
+
+  /* Foreground hierarchy — cool slate. */
+  --text:          #dde6ed;
+  --text-dim:      #6b8294;
+  --text-faint:    #3a4e60;
+
+  /* Accent — desaturated cyan for a HUD / radar feel rather than a
+     warm brand color. */
+  --accent:        #8fb5c5;
+  --accent-dim:    #4a6b7d;
+  --focus:         #c4dce6;
+
+  /* Status — muted so error states don't blast through the cold UI. */
+  --danger:        #c77272;
+  --success:       #7cb084;
+
+  /* Scrims (dialog / mini-player backdrop fills). Triple-tiered so
+     callers pick the right opacity for the layer they sit on. */
+  --scrim-deep:    rgba(5, 8, 12, 0.92);
+  --scrim-mid:     rgba(5, 8, 12, 0.60);
+  --scrim-light:   rgba(5, 8, 12, 0.15);
+
+  /* Composite drop-shadow used by `.dialog` and other lifted panels.
+     Stacks a 1px outline with a soft blurred shadow so the panel
+     reads as floating above the wireframe grid. */
+  --panel-shadow:  0 0 0 1px var(--border), 0 4px 20px rgba(0, 0, 0, 0.4);
+}

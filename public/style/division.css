@@ -1,0 +1,375 @@
+/**
+ * @file division.css
+ * @brief Tactical orange-HUD theme inspired by The Division's ISAC UI.
+ *
+ * First test theme proving the modular `style/<id>.css` template
+ * works end-to-end (defined here, linked from `index.html`,
+ * registered as an `<option>` in `#theme-select`, label translated
+ * across every locale in `language/`). Adding more themes follows the
+ * same five-step recipe documented in `dark.css`.
+ *
+ * @section ColorIntent Color intent
+ *   Reference: The Division (Massive Entertainment, 2016) — ISAC HUD.
+ *   - Charcoal / near-black surfaces (mil-spec equipment crate feel).
+ *   - Single dominant signature orange `#ff7a00` carrying every
+ *     active / focus / brand cue (chip selection, button accent,
+ *     focus ring, error scrim glow).
+ *   - Warm beige body text (`#e0d8c8`) instead of cold white — sells
+ *     the "burnt CRT" aesthetic without sacrificing legibility.
+ *   - Borders pull the same orange at full strength for emphasis,
+ *     dim slate for secondary divisions.
+ *   - Panel shadow re-tinted with a low-alpha orange bloom so lifted
+ *     `.dialog` panels glow like an ISAC overlay.
+ *
+ * @note Theme files may carry more than the variable palette.
+ *       Component-level CSS overrides, pseudo-element overlays,
+ *       keyframes, and @media rules are all valid as long as every
+ *       selector is prefixed with `:root[data-theme="<id>"]`. The
+ *       cascade applies / withdraws them automatically when
+ *       `data-theme` is toggled — zero JS coordination. The variable
+ *       palette block below is the *minimum* contract every theme
+ *       must satisfy; anything beyond it is opt-in flair. This file
+ *       exercises that latitude with a scanline overlay + parallax
+ *       snow (see end of file) so future themes have a working
+ *       sample.
+ *
+ * @note Decorative effects (overlays, particles, animated
+ *       backgrounds) MUST be qualified with `[data-view="home"]` so
+ *       they only render on the main collection-list view. Detail /
+ *       player / gallery / admin / login / search / novel / audio-
+ *       player are task-focused screens where ambient motion
+ *       distracts (reading text, watching video, editing metadata,
+ *       lining up form fields). The `<html data-view="...">`
+ *       attribute is kept in sync by `app.js` (`watchActiveView()`
+ *       MutationObserver). Variable definitions stay unqualified
+ *       since palette swaps don't distract — only motion does.
+ */
+
+/**
+ * @brief Variable palette — Division "tactical orange HUD".
+ */
+:root[data-theme="division"] {
+  /* Display name — see comment in `dark.css` for the contract.
+     Recommended max length: ~12 characters. */
+  --theme-name:    "Division";
+
+  /* Surfaces — deep tactical black, lifted in tight steps. The base
+     is slightly warmer than dark.css's blue-black to harmonize with
+     the orange accent. */
+  --bg:            #0a0c10;
+  --surface:       #14181f;
+  --surface-2:     #1c2129;
+  --hover:         #25303c;
+  --active:        #2e3d4d;
+
+  /* Borders — secondary divisions use cold slate, emphasis uses
+     full-saturation orange (the dominant ISAC signature edge). */
+  --border:        #2a3340;
+  --border-strong: #ff7a00;
+
+  /* Foreground — warm beige body, dim "old paper" tones for
+     secondary / faint. Avoids pure white because The Division UI
+     runs at a yellow-orange color cast across all readouts. */
+  --text:          #e0d8c8;
+  --text-dim:      #8a7860;
+  --text-faint:    #5a4e3e;
+
+  /* Accent — signature ISAC orange, with a darker fallback for hover
+     / disabled states and a brighter focus ring (peach) so keyboard
+     navigation still pops against the orange-on-orange combos. */
+  --accent:        #ff7a00;
+  --accent-dim:    #b35400;
+  --focus:         #ffaa44;
+
+  /* Status — pure red error (full-saturation alarm) and a green
+     success that intentionally leans cool / muted so it doesn't
+     compete with the orange brand. */
+  --danger:        #ff3b30;
+  --success:       #4caf50;
+
+  /* Scrims — same warm-black as the surfaces; the dialog backdrop
+     should read as a darkened version of the same crate, not a
+     blue-shifted overlay. */
+  --scrim-deep:    rgba(10, 12, 16, 0.94);
+  --scrim-mid:     rgba(10, 12, 16, 0.65);
+  --scrim-light:   rgba(10, 12, 16, 0.20);
+
+  /* Composite shadow — outline picks up the orange edge plus a soft
+     orange bloom around lifted panels (`.dialog`, mini-player).
+     Alpha intentionally low (0.15) so the bloom is felt, not seen. */
+  --panel-shadow:  0 0 0 1px var(--border-strong), 0 4px 24px rgba(255, 122, 0, 0.15);
+}
+
+/* ==========================================================================
+   Theme-specific dynamic effect — scanline overlay
+   ========================================================================== */
+
+/**
+ * @brief Division-only scanline overlay.
+ *
+ * Pinned to the viewport with `position: fixed` so it covers every
+ * view (home / detail / player / admin / dialog body) without DOM
+ * coupling to any specific layout. `pointer-events: none` keeps
+ * clicks pass-through; high z-index sits above app content but
+ * below the browser-native dialog `::backdrop` (which is drawn
+ * outside the page DOM and is therefore unaffected by z-index).
+ *
+ * The line pattern is a 4px-tall repeating gradient (1px lit,
+ * 3px transparent), translated downward by the keyframe at a
+ * leisurely 9s cadence. Animating `transform` instead of
+ * `background-position` keeps the work on the GPU compositor —
+ * zero style/layout invalidation per frame.
+ *
+ * The translate distance is exactly one pattern period (4px) so
+ * the loop seams perfectly without the browser repainting new
+ * pixels at the wrap point. Going further would amplify CPU
+ * interpolation cost without improving perceived smoothness.
+ *
+ * @section Activation Activation rules
+ *   Cascade-only: this rule lights up when `<html>` carries
+ *   `data-theme="division"` and is silently withdrawn the instant
+ *   the user picks another theme. No JS coordination, no LS flag,
+ *   no listener.
+ *
+ * @section Accessibility Accessibility
+ *   The `prefers-reduced-motion: reduce` media query freezes the
+ *   animation in place (lines visible but stationary), satisfying
+ *   the OS-level "minimize animation" contract while still letting
+ *   the visual signature of the theme come through.
+ */
+:root[data-theme="division"][data-view="home"] body::after {
+  content: "";
+  position: fixed;
+  /* Extend the box one pattern step above (-4px) and one full
+     viewport below (-100vh) so the translateY animation never
+     reveals a clipped edge — the bottom of the visible region is
+     always covered by gradient repeats. */
+  inset: -4px 0 -100vh 0;
+  pointer-events: none;
+  z-index: 9999;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 122, 0, 0.06) 0,
+    rgba(255, 122, 0, 0.06) 1px,
+    transparent 1px,
+    transparent 4px
+  );
+  animation: division-scanline 9s linear infinite;
+  /* Hint the compositor to give this layer its own surface so the
+     transform animation never causes a paint of underlying content. */
+  will-change: transform;
+}
+
+/**
+ * @brief Single-period drift keyframe for the scanline overlay.
+ *
+ * 4px = the gradient's repeating period; translating exactly one
+ * period yields a seamless loop because the resulting visual is
+ * identical to the start frame. Linear timing — no easing — so
+ * the perceived speed is constant.
+ */
+@keyframes division-scanline {
+  from { transform: translateY(0); }
+  to   { transform: translateY(4px); }
+}
+
+/**
+ * @brief Reduced-motion fallback.
+ *
+ * Honors the OS-level "minimize animation" preference by freezing
+ * the scanline at its starting position. The lines are still
+ * visible (the theme's signature is preserved) but no longer
+ * scroll. We override `animation` to `none` rather than removing
+ * the rule entirely, so the static gradient remains in place.
+ *
+ * Note: the global `@media (prefers-reduced-motion: reduce)` block
+ * in `style.css` (line ~91) zeroes out `transition` / `animation`
+ * with `!important`, which would already disable this animation;
+ * this rule is kept here as a self-documenting, self-contained
+ * fallback so the theme file is fully understandable in isolation.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="division"][data-view="home"] body::after {
+    animation: none;
+  }
+}
+
+/* ==========================================================================
+   Theme-specific dynamic effect — falling snow (parallax, two layers)
+   ========================================================================== */
+
+/**
+ * @brief Division-only snow overlay (far + near layers, parallax).
+ *
+ * Layered on top of the page below the scanline. Two viewport-sized
+ * pseudo-elements — one on `<html>` (far snow: small, slow,
+ * semi-transparent) and one on `<body>` (near snow: larger, faster,
+ * more opaque) — together produce a parallax depth illusion: the
+ * far layer's slow drift reads as distant flakes, the near layer's
+ * faster drift reads as close ones. Two layers are enough to sell
+ * the depth without crowding the screen.
+ *
+ * @section TechniqueChoice Why CSS-only / why two layers
+ *   A real particle system (each flake independently animated)
+ *   would require either tens of DOM elements or a JS canvas
+ *   loop. Both add coordination cost a theme template should not
+ *   need: DOM-side it pollutes the page tree; JS-side it forces
+ *   the theme system to support per-theme JS modules — a much
+ *   larger contract change. Two layers of CSS-painted dots
+ *   animated with `transform: translateY` give a "good-enough"
+ *   illusion at zero coordination cost: each layer's flakes still
+ *   move in lockstep within the layer, but with the two layers
+ *   running at different speeds (and the dots positioned on a
+ *   pseudo-random grid) the eye reads parallax instead of "two
+ *   sheets sliding". Tested visually at 25s / 14s loop pair.
+ *
+ * @section LayerStack Layer stack (z-index, top to bottom)
+ *   - 9999  body::after  → scanline (declared above)
+ *   - 9998  body::before → near snow (this file)
+ *   - 9997  html::before → far snow (this file)
+ *   - app content under everything
+ *   All three layers share `pointer-events: none` so the entire
+ *   stack is non-interactive — clicks fall through to the app.
+ *
+ * @section Looping Looping technique
+ *   Each layer is positioned with `top: -100vh` and a height of
+ *   200vh, packed with one viewport's worth of dots in the
+ *   `background-image` and tiled vertically with `background-size:
+ *   100% 100vh; background-repeat: repeat-y`. The animation
+ *   translates `transform` by exactly 100vh (one viewport / one
+ *   tile) — at that moment a fresh tile slides into view from above
+ *   while the bottom tile leaves, looking visually identical to
+ *   the start frame. Zero paint per frame; pure GPU compositor.
+ *
+ * @section Accessibility Accessibility
+ *   The shared `@media (prefers-reduced-motion: reduce)` block
+ *   below freezes both snow layers (and the scanline) in place.
+ *   The dots stay visible so the theme's wintry signature is
+ *   preserved, but nothing moves.
+ */
+
+/**
+ * @brief Far snow layer — small, slow, semi-transparent dots.
+ *
+ * Anchored to `<html>::before` so it shares the viewport-fixed
+ * coordinate system with the body layers. 22 dots at ~0.55 alpha,
+ * 1px each, scattered pseudo-randomly across one tile (the dots
+ * are listed in groups of `radial-gradient` background images;
+ * each gradient paints a single dot at one absolute position
+ * within the tile). 26-second period so each flake takes nearly
+ * half a minute to traverse the screen — reads as "distant".
+ */
+:root[data-theme="division"][data-view="home"]::before {
+  content: "";
+  position: fixed;
+  top: -100vh;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 9997;
+  background-image:
+    radial-gradient(1px 1px at  3%  4%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 11% 12%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 19%  6%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 28% 18%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 36% 10%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 44% 22%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 52%  8%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 60% 26%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 68% 14%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 76% 32%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 84%  9%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 92% 28%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at  6% 42%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 17% 50%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 31% 46%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 47% 58%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 63% 51%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 78% 66%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 89% 54%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 14% 78%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 41% 86%, rgba(255,255,255,0.55) 100%, transparent 100%),
+    radial-gradient(1px 1px at 72% 92%, rgba(255,255,255,0.55) 100%, transparent 100%);
+  background-size: 100% 100vh;
+  background-repeat: repeat-y;
+  animation: division-snow-far 26s linear infinite;
+  will-change: transform;
+}
+
+/**
+ * @brief Near snow layer — larger, faster, more opaque dots.
+ *
+ * Anchored to `<body>::before` (body::after is the scanline). 18
+ * dots at 2-3px each, ~0.85 alpha, on a tile that drifts at 14s
+ * — close to twice the speed of the far layer to amplify
+ * parallax. The dot grid is offset from the far layer's grid so
+ * the two never collide visually.
+ */
+:root[data-theme="division"][data-view="home"] body::before {
+  content: "";
+  position: fixed;
+  top: -100vh;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 9998;
+  background-image:
+    radial-gradient(2px 2px at  8%  3%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 22% 14%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 38%  7%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 51% 20%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 66%  5%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 81% 16%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 94% 11%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 12% 32%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 27% 40%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 44% 36%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 59% 47%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 73% 41%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 87% 49%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at  5% 64%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 33% 71%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 56% 78%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(2px 2px at 79% 83%, rgba(255,255,255,0.85) 100%, transparent 100%),
+    radial-gradient(3px 3px at 21% 94%, rgba(255,255,255,0.85) 100%, transparent 100%);
+  background-size: 100% 100vh;
+  background-repeat: repeat-y;
+  animation: division-snow-near 14s linear infinite;
+  will-change: transform;
+}
+
+/**
+ * @brief Single-tile drift keyframes for both snow layers.
+ *
+ * `100vh` is one full tile (since `background-size: 100% 100vh`),
+ * so translating that distance brings the next-up tile exactly
+ * into the position the previous tile occupied at frame 0 —
+ * resulting in a perfectly seamless loop. The two layers share
+ * the same start/end deltas; the *speed* difference comes from
+ * each rule's `animation-duration` (26s far vs 14s near).
+ */
+@keyframes division-snow-far {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, 100vh, 0); }
+}
+
+@keyframes division-snow-near {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(0, 100vh, 0); }
+}
+
+/**
+ * @brief Reduced-motion fallback for both snow layers.
+ *
+ * Mirrors the scanline's reduced-motion rule. Snow remains
+ * visible (the theme's wintry feel is preserved) but is frozen
+ * at the starting position — no scrolling.
+ */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme="division"][data-view="home"]::before,
+  :root[data-theme="division"][data-view="home"] body::before {
+    animation: none;
+  }
+}

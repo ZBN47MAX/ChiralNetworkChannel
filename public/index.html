@@ -1,0 +1,1611 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chiral Network Channel</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/favicon.png">
+  <!--
+    First-paint theme restore.
+
+    Runs synchronously before the body is painted to avoid a
+    light/dark flash on reload. Reads `ds124:theme` from localStorage
+    and stamps the matching `data-theme` attribute on <html>; if the
+    stored value is unknown (mistyped, removed theme, fresh user) we
+    leave the attribute unset so `style/dark.css`'s bare `:root` block
+    becomes the default.
+
+    KNOWN_THEMES is the source of truth for which `style/<id>.css`
+    files index.html below ships a `<link>` for. Adding a new theme:
+    extend this array AND add a `<link>` AND add an `<option>` to
+    `#theme-select` AND drop a `style/<id>.css` file. JS-side logic
+    in `app.js` reads `#theme-select` to discover themes at runtime.
+  -->
+  <script>
+    (function () {
+      var KNOWN_THEMES = ['dark', 'light', 'division'];
+      try {
+        var t = localStorage.getItem('ds124:theme');
+        if (t && KNOWN_THEMES.indexOf(t) !== -1) {
+          document.documentElement.setAttribute('data-theme', t);
+        }
+      } catch (e) {}
+    })();
+  </script>
+
+  <!--
+    Theme palettes — one `<link>` per available theme.
+
+    Each file declares its variables under a `:root[data-theme="<id>"]`
+    block (and `dark.css` additionally claims the bare `:root` as the
+    default). Loading them all up-front means switching themes is a
+    pure attribute toggle: zero re-fetch, zero FOUC.
+
+    Adding a new theme: drop a `style/<id>.css`, add a `<link>` here,
+    add an `<option>` in `#theme-select`, add `header.theme.<id>` to
+    every `language/*.json`. No JS edits required.
+  -->
+  <link rel="stylesheet" href="style/dark.css?v=__BUILD__">
+  <link rel="stylesheet" href="style/light.css?v=__BUILD__">
+  <link rel="stylesheet" href="style/division.css?v=__BUILD__">
+  <link rel="stylesheet" href="style.css?v=__BUILD__">
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <button id="back-btn" class="icon-btn" type="button" hidden data-i18n="header.back">返回</button>
+      <h1 id="title">CHIRAL NETWORK CHANNEL</h1>
+    </div>
+
+    <div class="header-actions">
+      <span id="status"></span>
+      <span id="count"></span>
+
+      <div id="kind-switch" class="kind-switch" data-active="video"
+              data-i18n-aria-label="header.kindSwitch.aria"
+              data-i18n-title="header.kindSwitch.title"
+              aria-label="切换模式" title="切换视频/音频/图片/小说">
+        <span class="kind-slider" aria-hidden="true"></span>
+        <button type="button" class="kind-label kind-label-video" data-kind="video" data-i18n="header.kind.video">视频</button>
+        <button type="button" class="kind-label kind-label-audio" data-kind="audio" data-i18n="header.kind.audio">音频</button>
+        <button type="button" class="kind-label kind-label-image" data-kind="image" data-i18n="header.kind.image">图片</button>
+        <button type="button" class="kind-label kind-label-novel" data-kind="novel" data-i18n="header.kind.novel">小说</button>
+      </div>
+
+      <button id="user-pill" class="user-pill" type="button" hidden
+              data-i18n-title="header.userPill.title"
+              data-i18n-aria-label="header.userPill.aria"
+              title="设置菜单" aria-label="设置菜单" aria-haspopup="true" aria-expanded="false">
+        <span id="user-name"></span>
+        <span class="user-pill-caret" data-icon="menu-h" aria-hidden="true"></span>
+      </button>
+      <button id="login-btn" class="icon-btn" type="button" hidden data-i18n="header.login">登录</button>
+
+      <button id="header-create-btn" class="icon-btn icon-only" type="button"
+              data-i18n-title="header.create.title"
+              data-i18n-aria-label="header.create.aria"
+              title="新建合集" aria-label="新建合集" data-icon="plus" hidden></button>
+
+      <button id="header-search-btn" class="icon-btn icon-only" type="button"
+              data-i18n-title="header.search.title"
+              data-i18n-aria-label="header.search.aria"
+              title="高级搜索" aria-label="高级搜索" data-icon="search"></button>
+
+      <button id="header-history-btn" class="icon-btn icon-only" type="button"
+              data-i18n-title="header.history.title"
+              data-i18n-aria-label="header.history.aria"
+              title="播放历史" aria-label="播放历史" data-icon="history" hidden></button>
+
+      <!--
+        Theme dropdown — wrapped in `.header-select-wrap` so an inline
+        SVG palette icon can float over the select's left padding,
+        giving a language-agnostic visual cue. The icon uses
+        `currentColor` so it follows whatever the active theme paints
+        `--text-dim` as.
+
+        Each `<option value="X">` corresponds to a `style/X.css` file
+        loaded above. The `<option>` text is a placeholder — at boot,
+        `app.js` reads `--theme-name` from each theme's CSS and
+        overwrites every `<option>` label. Theme names are therefore
+        owned by their `.css` file (single source of truth) and are
+        locale-independent: whatever the CSS declares, every UI
+        language sees the same string.
+
+        Adding a theme: drop `style/X.css` (with `--theme-name: "..."`),
+        add a `<link>` above, append `<option value="X">X</option>`
+        here, extend the first-paint script's KNOWN_THEMES array.
+        No language JSON changes required.
+      -->
+      <div class="header-select-wrap">
+        <span class="header-select-prefix" aria-hidden="true">
+          <!-- Palette icon: rounded artist's palette body with a
+               thumb cutout on the right and four color dots, evoking
+               "pick a visual style". Drawn at viewBox 16x16 so it
+               renders crisp at 14px. -->
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M 8 2 C 11.5 2 14 4.5 14 8 C 14 9.6 12.6 10 11.5 10 L 10 10 C 9.4 10 9 10.5 9 11 C 9 11.4 9.4 11.7 9.4 12.3 C 9.4 13.4 8.7 14 8 14 C 4.5 14 2 11.5 2 8 C 2 4.5 4.5 2 8 2 Z"/>
+            <circle cx="5"   cy="6.5" r="0.85" fill="currentColor" stroke="none"/>
+            <circle cx="8"   cy="4.5" r="0.85" fill="currentColor" stroke="none"/>
+            <circle cx="11"  cy="6.5" r="0.85" fill="currentColor" stroke="none"/>
+            <circle cx="5.5" cy="9.5" r="0.85" fill="currentColor" stroke="none"/>
+          </svg>
+        </span>
+        <select id="theme-select" class="header-select header-select-with-icon" aria-label="主题"
+                data-i18n-aria-label="header.theme.aria"
+                data-i18n-title="header.theme.title"
+                title="切换主题">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+          <option value="division">Division</option>
+        </select>
+      </div>
+      <!--
+        Language dropdown — same wrapper pattern as theme, with a
+        globe icon as the language-agnostic prefix. Endonym labels
+        ("中文", "English", "繁體中文") so users find their language
+        regardless of the currently active locale (hence no `data-i18n`
+        on options).
+
+        Adding a locale: drop `language/<id>.json` in the folder,
+        append `<option value="<id>">` here. App-side discovery is
+        `document.querySelectorAll('#lang-select option')`, so no JS
+        edits required.
+      -->
+      <div class="header-select-wrap">
+        <span class="header-select-prefix" aria-hidden="true">
+          <!-- Globe icon: outer circle, inner ellipse for the
+               longitude meridian, equator line. Reads as "world /
+               languages" in any locale. -->
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="6"/>
+            <ellipse cx="8" cy="8" rx="3" ry="6"/>
+            <line x1="2" y1="8" x2="14" y2="8"/>
+          </svg>
+        </span>
+        <select id="lang-select" class="header-select header-select-with-icon" aria-label="语言"
+                data-i18n-aria-label="header.lang.aria"
+                data-i18n-title="header.lang.title"
+                title="切换语言">
+          <option value="zh">中文</option>
+          <option value="zh-TW">繁體中文</option>
+          <option value="en">English</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Shared upload input used by the detail-page upload action. The
+         accept attribute is set by app.js just before click() based on
+         the current subsystem (state.kind): video kind gets the video
+         extension list, audio kind gets the audio list. No MIME
+         wildcards (audio/*, video/*) — those silently let through
+         files the server rejects, confusing users. -->
+    <input id="upload-input" type="file" multiple hidden>
+  </header>
+
+  <!-- Settings / navigation menu -->
+  <div id="menu-popover" class="menu-popover" hidden>
+    <button type="button" class="menu-item" data-menu-action="history">
+      <span class="menu-icon" data-icon="history"></span>
+      <span class="menu-label" data-i18n="menu.history">播放历史</span>
+    </button>
+    <button type="button" class="menu-item" data-menu-action="admin" hidden>
+      <span class="menu-icon" data-icon="admin"></span>
+      <span class="menu-label" data-i18n="menu.admin">管理面板</span>
+    </button>
+    <div class="menu-divider"></div>
+    <button type="button" class="menu-item menu-item-toggle" data-menu-action="toggle-auto-video-mini">
+      <span class="menu-icon" data-icon="mini"></span>
+      <span class="menu-label" data-i18n="menu.autoVideoMini">离开页面自动小窗（视频）</span>
+      <span class="menu-toggle" id="auto-video-mini-toggle" aria-hidden="true"></span>
+    </button>
+    <button type="button" class="menu-item menu-item-toggle" data-menu-action="toggle-auto-audio-mini">
+      <span class="menu-icon" data-icon="mini"></span>
+      <span class="menu-label" data-i18n="menu.autoAudioMini">离开页面自动小窗（音频）</span>
+      <span class="menu-toggle" id="auto-audio-mini-toggle" aria-hidden="true"></span>
+    </button>
+    <button type="button" class="menu-item" data-menu-action="cycle-audio-mini-mode">
+      <span class="menu-icon" data-icon="mini"></span>
+      <span class="menu-label"><span data-i18n="menu.audioMiniMode.label">音频悬浮模式</span>: <span id="audio-mini-mode-label">浏览器内</span></span>
+    </button>
+    <button type="button" class="menu-item" data-menu-action="cycle-sub-size">
+      <span class="menu-icon" data-icon="text"></span>
+      <span class="menu-label"><span data-i18n="menu.subSize.label">字幕字号</span>: <span id="sub-size-label">中</span></span>
+    </button>
+    <div class="menu-divider"></div>
+    <button type="button" class="menu-item" data-menu-action="password" hidden>
+      <span class="menu-icon" data-icon="key"></span>
+      <span class="menu-label" data-i18n="menu.password">修改密码</span>
+    </button>
+    <button type="button" class="menu-item" data-menu-action="logout" hidden>
+      <span class="menu-icon" data-icon="logout"></span>
+      <span class="menu-label" data-i18n="menu.logout">登出</span>
+    </button>
+    <div class="menu-footer mono">CHIRAL NETWORK CHANNEL · __VERSION__</div>
+  </div>
+
+  <main>
+    <!-- ============================================================
+         LOGIN
+         ============================================================ -->
+    <section id="view-login" class="view" hidden>
+      <div class="login-wrap">
+        <div class="login-card">
+          <div class="login-brand">// CHIRAL NETWORK CHANNEL</div>
+          <div id="login-notice" class="login-notice" hidden></div>
+          <div class="login-tabs" id="login-tabs">
+            <button type="button" data-mode="login" class="active">登录</button>
+            <button type="button" data-mode="register">注册</button>
+          </div>
+          <form id="login-form" autocomplete="off">
+            <label class="field">
+              <span>用户名</span>
+              <input name="username" autocomplete="username" required maxlength="32">
+            </label>
+            <label class="field">
+              <span>密码</span>
+              <input name="password" type="password" autocomplete="current-password" required maxlength="128">
+            </label>
+            <button type="submit" class="btn-primary">
+              <span id="login-submit-label">CONFIRM</span>
+            </button>
+            <div id="login-error" class="login-error"></div>
+          </form>
+          <div class="login-footer"><span class="mono">LAN-ONLY · NO ENCRYPTION</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         HOME
+         ============================================================ -->
+    <section id="view-home" class="view" hidden>
+      <div id="home-continue" class="home-row" hidden>
+        <!-- Label text is swapped between "CONTINUE WATCHING" and
+             "CONTINUE LISTENING" by applyKindUI() when the user flips
+             the mode pill. -->
+        <div class="section-label" id="home-continue-label">// CONTINUE WATCHING</div>
+        <div class="row-scroll" id="continue-scroll"></div>
+      </div>
+      <div id="home-recent" class="home-row" hidden>
+        <div class="section-label">// RECENTLY ADDED</div>
+        <div class="row-scroll" id="recent-scroll"></div>
+      </div>
+      <div id="home-play-all" class="home-row" hidden>
+        <div class="section-label">// ALL AUDIO</div>
+        <div class="play-all-bar">
+          <button type="button" id="play-all-btn" class="btn-primary mono">&#9654; 播放全部</button>
+          <button type="button" id="play-all-shuffle-btn" class="btn-secondary mono">&#9646; 随机播放</button>
+          <span id="play-all-count" class="mono play-all-count"></span>
+          <button type="button" id="play-all-toggle" class="icon-btn mono" title="展开/收起曲目列表">▼</button>
+        </div>
+        <ul id="play-all-tracklist" class="home-tracklist" hidden></ul>
+      </div>
+      <div id="home-liked" class="home-row" hidden>
+        <div class="section-label">// MY LIKES ♡</div>
+        <div class="play-all-bar">
+          <button type="button" id="play-liked-btn" class="btn-primary mono">&#9654; 播放喜欢</button>
+          <button type="button" id="play-liked-shuffle-btn" class="btn-secondary mono">&#9646; 随机播放</button>
+          <span id="liked-count" class="mono play-all-count"></span>
+          <button type="button" id="play-liked-toggle" class="icon-btn mono" title="展开/收起曲目列表">▼</button>
+          <label class="play-switch liked-hidden-switch" title="显示隐藏标签下的曲目"><input type="checkbox" id="liked-show-hidden"><span class="play-switch-track"></span><span class="play-switch-label">隐藏</span></label>
+        </div>
+        <ul id="play-liked-tracklist" class="home-tracklist" hidden></ul>
+      </div>
+      <div id="home-image-liked" class="home-row" hidden>
+        <div class="section-label">// MY LIKED IMAGES ♡</div>
+        <div class="play-all-bar">
+          <button type="button" id="view-liked-images-btn" class="btn-primary mono">&#9654; 浏览喜欢</button>
+          <span id="liked-images-count" class="mono play-all-count"></span>
+          <label class="play-switch liked-hidden-switch" title="显示隐藏标签下的图片"><input type="checkbox" id="liked-images-show-hidden"><span class="play-switch-track"></span><span class="play-switch-label">隐藏</span></label>
+        </div>
+        <div id="liked-images-scroll" class="gallery-grid" style="max-height:320px;overflow-y:auto"></div>
+      </div>
+      <div class="home-toolbar">
+        <!-- Mobile-only summary row. On phones the rest of the toolbar
+             is collapsed by default behind a "filter:" pill — tapping
+             the pill (or the ⋯ button) toggles .home-toolbar.expanded
+             and reveals the full chips/sort/search/admin row. Desktop
+             ignores this; CSS hides it via min-width media query. -->
+        <div class="toolbar-mobile-bar">
+          <button type="button" id="toolbar-expand-btn" class="toolbar-summary mono">
+            <span id="toolbar-summary-text">全部</span>
+            <span class="toolbar-summary-caret" aria-hidden="true">▾</span>
+          </button>
+        </div>
+        <div class="filter-chips" id="filter-chips">
+          <button type="button" data-type="all" class="active">全部</button>
+          <button type="button" data-type="series">剧集</button>
+          <button type="button" data-type="movie">电影</button>
+          <button type="button" data-type="other">其他</button>
+        </div>
+        <!-- Operator switcher for multi-tag chip selection.
+             Visible only when at least one chip is selected. -->
+        <div class="filter-op" id="filter-op" hidden>
+          <button type="button" data-op="OR"  class="active" title="任一：包含任一标签">OR</button>
+          <button type="button" data-op="AND" title="全部：同时包含全部标签">AND</button>
+          <button type="button" data-op="NOT" title="非全部：不同时包含全部标签">NOT</button>
+          <button type="button" data-op="ONLY" title="单选：只激活最后点的那个标签">ONLY</button>
+        </div>
+        <div class="filter-spacer"></div>
+        <label class="fav-toggle" id="fav-toggle" hidden>
+          <input type="checkbox" id="fav-toggle-input">
+          <span>仅看收藏</span>
+        </label>
+        <select id="sort-select" class="sort-select">
+          <option value="created">最近添加</option>
+          <option value="filename">文件名</option>
+          <option value="title">标题</option>
+          <option value="episodes">集数</option>
+          <option value="size">大小</option>
+          <option value="createdAt">创建时间</option>
+        </select>
+        <button type="button" id="sort-dir-btn" class="icon-btn" title="切换升序/降序" aria-label="切换排序方向">
+          <span data-icon="sort-asc"></span>
+        </button>
+        <div class="search-wrap">
+          <input type="search" id="search-input" placeholder="搜索合集标题..." autocomplete="off">
+          <button type="button" id="home-advanced-search" class="icon-btn search-advanced-btn" title="进入高级搜索（多字段 + 跨板块）" aria-label="高级搜索">高级搜索 →</button>
+        </div>
+        <label class="fav-toggle admin-only" id="show-hidden-toggle" title="勾选后包含挂着隐藏标签的合集">
+          <input type="checkbox" id="show-hidden-input">
+          <span>含隐藏</span>
+        </label>
+        <button type="button" id="home-audio-upload-btn" class="icon-btn perm-upload" hidden
+                title="上传音频" aria-label="上传音频">
+          <span data-icon="upload"></span>
+          <span style="margin-left:6px">上传音频</span>
+        </button>
+        <!-- Bulk manage mode toggle — admin only. Entering mode shows
+             checkboxes on every card and docks the #bulk-col-bar
+             toolbar at the bottom of the viewport. -->
+        <button type="button" id="home-bulk-btn" class="icon-btn admin-only"
+                title="批量管理合集" aria-label="批量管理合集">
+          <span data-icon="manage"></span>
+          <span style="margin-left:6px">批量管理</span>
+        </button>
+      </div>
+      <div id="cards"></div>
+    </section>
+
+    <!-- ============================================================
+         DETAIL
+         ============================================================ -->
+    <section id="view-detail" class="view" hidden>
+      <div class="detail-scroll">
+        <div id="detail-hero" class="detail-hero">
+          <div id="detail-bg" class="detail-bg"></div>
+          <div class="detail-content">
+            <div id="detail-cover" class="detail-cover"></div>
+            <div class="detail-meta">
+              <div id="detail-type" class="detail-type"></div>
+              <h2 id="detail-title" class="detail-title"></h2>
+              <div id="detail-authors" class="detail-authors mono" hidden></div>
+              <div id="detail-stats" class="detail-stats"></div>
+              <p id="detail-desc" class="detail-desc"></p>
+              <div class="detail-actions">
+                <button id="play-continue-btn" type="button" class="btn-primary">
+                  <span id="play-continue-label">播放</span>
+                </button>
+                <button id="play-start-btn" type="button" class="btn-secondary" hidden>从头播放</button>
+              </div>
+              <div class="detail-toolbar" id="detail-toolbar" hidden>
+                <button type="button" class="icon-action" id="act-fav" data-icon="star-outline" title="收藏" aria-label="收藏"></button>
+                <label class="play-switch like-switch" id="act-like-all-wrap" title="全部加入我喜欢" hidden><input type="checkbox" id="act-like-all"><span class="play-switch-track like-track"></span><span class="play-switch-label mono">♡ 全部喜欢</span></label>
+                <button type="button" class="icon-action perm-modify" id="act-cover" data-icon="picture" title="设置封面" aria-label="设置封面"></button>
+                <button type="button" class="icon-action perm-modify" id="act-edit" data-icon="edit" title="编辑合集" aria-label="编辑合集"></button>
+                <button type="button" class="icon-action perm-upload" id="act-upload" data-icon="upload" title="上传文件" aria-label="上传"></button>
+                <button type="button" class="icon-action perm-modify" id="act-intro" data-icon="clock" title="设置片头" aria-label="设置片头"></button>
+                <button type="button" class="icon-action perm-modify" id="act-pretranscode" data-icon="transcode" title="预转此集合所有 mkv (后台队列)" aria-label="预转 mkv"></button>
+                <button type="button" class="icon-action perm-delete" id="act-manage" data-icon="manage" title="管理模式（批量操作）" aria-label="管理模式"></button>
+                <button type="button" class="icon-action danger perm-delete" id="act-delete" data-icon="trash" title="删除合集" aria-label="删除合集"></button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-episodes">
+          <!-- Tab strip: the legacy flat episode list vs the new
+               interactive file-tree view. Both panels render from the
+               same collection state; tree adds an extra fetch of
+               /api/collections/:id/tree on first switch. -->
+          <div class="detail-tab-bar mono">
+            <button type="button" class="detail-tab active" data-tab="episodes">// EPISODES</button>
+            <button type="button" class="detail-tab" data-tab="tree">// FILE STRUCTURE</button>
+          </div>
+          <div id="detail-tab-episodes" class="detail-tab-panel active">
+            <div id="ep-sort-bar" class="ep-sort-bar" hidden>
+              <select id="ep-sort-select" class="ep-sort-select mono">
+                <option value="default">默认排序</option>
+                <option value="filename">文件名</option>
+                <option value="title">标题</option>
+                <option value="trackNumber">#</option>
+                <option value="artist">作者 / 公司</option>
+                <option value="mtime">文件时间</option>
+              </select>
+              <button type="button" id="ep-sort-dir-btn" class="icon-btn ep-sort-dir-btn mono" title="切换正序/倒序">↑</button>
+            </div>
+            <ul id="episode-list"></ul>
+          </div>
+          <div id="detail-tab-tree" class="detail-tab-panel" hidden>
+            <ul id="file-tree"></ul>
+          </div>
+        </div>
+
+        <div class="detail-comments">
+          <div class="section-label">// COMMENTS</div>
+          <div id="comment-compose" hidden>
+            <textarea id="comment-text" rows="3" maxlength="2000" placeholder="写点什么..."></textarea>
+            <div class="comment-compose-actions">
+              <span id="comment-error" class="comment-error"></span>
+              <button type="button" id="comment-submit" class="btn-primary">发表</button>
+            </div>
+          </div>
+          <ul id="comment-list"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         PLAYER
+         ============================================================ -->
+    <section id="view-player" class="view" hidden>
+      <aside id="player-sidebar">
+        <div class="player-sidebar-head">
+          <div id="player-sidebar-title" class="mono"></div>
+        </div>
+        <div id="player-ep-sort-bar" class="ep-sort-bar" hidden>
+          <select id="player-ep-sort-select" class="ep-sort-select mono">
+            <option value="default">默认排序</option>
+            <option value="filename">文件名</option>
+            <option value="title">标题</option>
+            <option value="trackNumber">#</option>
+            <option value="artist">作者 / 公司</option>
+            <option value="mtime">文件时间</option>
+          </select>
+          <button type="button" id="player-ep-sort-dir-btn" class="icon-btn ep-sort-dir-btn mono" title="切换正序/倒序">↑</button>
+        </div>
+        <ul id="player-episode-list"></ul>
+      </aside>
+      <div id="player-main">
+        <div id="player-container"></div>
+        <div id="player-info">
+          <div class="player-info-left">
+            <div id="player-ep-title" class="player-ep-title"></div>
+            <div id="player-ep-meta" class="player-ep-meta"></div>
+          </div>
+          <div class="player-info-right">
+            <button type="button" id="prev-ep-btn" class="icon-btn" title="上一集 (P)">◀ 上一集</button>
+            <button type="button" id="next-ep-btn" class="icon-btn" title="下一集 (N)">下一集 ▶</button>
+            <label class="play-switch" title="单集循环 (L)"><input type="checkbox" id="loop-btn"><span class="play-switch-track"></span><span class="play-switch-label mono">LOOP</span></label>
+            <label class="play-switch" title="列表循环"><input type="checkbox" id="loop-all-btn"><span class="play-switch-track"></span><span class="play-switch-label mono">ALL</span></label>
+            <label class="play-switch" title="随机 (S)"><input type="checkbox" id="shuffle-btn"><span class="play-switch-track"></span><span class="play-switch-label mono">SHUF</span></label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         AUDIO PLAYER
+         ============================================================ -->
+    <section id="view-audio-player" class="view" hidden>
+      <aside id="audio-sidebar">
+        <div class="player-sidebar-head">
+          <div id="audio-sidebar-title" class="mono"></div>
+        </div>
+        <div id="audio-ep-sort-bar" class="ep-sort-bar" hidden>
+          <select id="audio-ep-sort-select" class="ep-sort-select mono">
+            <option value="default">默认排序</option>
+            <option value="filename">文件名</option>
+            <option value="title">标题</option>
+            <option value="trackNumber">#</option>
+            <option value="artist">作者 / 公司</option>
+            <option value="mtime">文件时间</option>
+          </select>
+          <button type="button" id="audio-ep-sort-dir-btn" class="icon-btn ep-sort-dir-btn mono" title="切换正序/倒序">↑</button>
+        </div>
+        <ul id="audio-episode-list"></ul>
+      </aside>
+      <div id="audio-main">
+        <div id="audio-hero">
+          <div id="audio-cover" class="audio-cover"></div>
+          <div id="audio-meta">
+            <div id="audio-ep-title" class="audio-ep-title"></div>
+            <div id="audio-ep-meta" class="audio-ep-meta mono"></div>
+          </div>
+        </div>
+        <div id="audio-player-wrap">
+          <audio id="audio-player" controls preload="metadata" playsinline></audio>
+          <!-- Video episodes inside an audio collection (MV / explainer
+               clips) play through this sibling element. JS toggles
+               `hidden` on whichever element is idle and keeps the active
+               one in lockstep with `audioPlayerEl`. The audio element
+               keeps its Plyr wrapper untouched so audio-only playback
+               is identical to before. -->
+          <video id="audio-player-video" controls preload="metadata" playsinline hidden></video>
+        </div>
+        <div id="audio-controls-row" class="mono">
+          <button type="button" id="audio-prev-btn" class="icon-btn">◀ 上一曲</button>
+          <button type="button" id="audio-next-btn" class="icon-btn">下一曲 ▶</button>
+          <label class="play-switch" title="单曲循环"><input type="checkbox" id="audio-loop-btn"><span class="play-switch-track"></span><span class="play-switch-label mono">LOOP</span></label>
+          <label class="play-switch" title="列表循环"><input type="checkbox" id="audio-loop-all-btn"><span class="play-switch-track"></span><span class="play-switch-label mono">ALL</span></label>
+          <label class="play-switch" title="随机播放"><input type="checkbox" id="audio-shuffle-btn"><span class="play-switch-track"></span><span class="play-switch-label mono">SHUF</span></label>
+          <label class="play-switch like-switch" title="我喜欢"><input type="checkbox" id="audio-like-btn"><span class="play-switch-track like-track"></span><span class="play-switch-label mono">♡</span></label>
+          <label class="play-switch" title="悬浮字幕"><input type="checkbox" id="audio-fsub-toggle"><span class="play-switch-track"></span><span class="play-switch-label mono">SUB</span></label>
+          <div class="filter-spacer"></div>
+          <button type="button" id="audio-sleep-btn" class="icon-btn" title="定时关闭">
+            <span data-icon="clock"></span>
+            <span id="audio-sleep-label">定时关闭</span>
+          </button>
+        </div>
+        <div id="audio-lyric-panel" class="lyric-panel" aria-live="off">
+          <div id="audio-lyric-empty" class="lyric-empty mono" hidden>无字幕 / 歌词</div>
+          <ul id="audio-lyric-list" class="lyric-list"></ul>
+        </div>
+        <!-- Floating overlay subtitle: shows ONLY the current line in
+             a translucent pill anchored to the bottom of the viewport,
+             independent of the lyric panel scroll. Toggled on/off by
+             #audio-fsub-toggle (desktop) and #amst-fsub (mobile). The
+             toggle state is persisted to localStorage. Long single
+             lines wrap to multiple visual lines with word-break: break-word
+             so nothing gets clipped. -->
+        <div id="audio-fsub" class="audio-fsub" hidden>
+          <span id="audio-fsub-text"></span>
+        </div>
+
+        <!-- ============================================================
+             MOBILE-ONLY STAGE (≤600px)
+             A purpose-built layout that mirrors mainstream streaming
+             apps: dominant square cover, large title block, custom
+             progress slider with time row, 5-button main control row
+             (shuffle / prev / play / next / loop), 4-button aux row
+             (like / sleep / lyrics / queue). On desktop CSS hides
+             this entirely; on phone CSS hides the existing hero +
+             plyr + controls + sidebar and renders this in their place.
+
+             All buttons are bound in app.js to the EXISTING handlers
+             on the desktop controls (audioLoopBtn, audioShuffleBtn,
+             etc.) so loop/shuffle/like state stays in lockstep with
+             the always-rendered (off-screen) toggles.
+             ============================================================ -->
+        <div id="audio-mobile-stage" class="amst">
+          <div class="amst-cover-frame">
+            <div id="amst-cover" class="amst-cover"></div>
+            <!-- Mobile-only video surface for video episodes inside an
+                 audio collection. Sits inside the same square cover
+                 frame so the existing layout stays untouched: when a
+                 video ep is loaded, JS hides #amst-cover and unhides
+                 this element. CSS forces this to stay invisible on
+                 desktop and the desktop #audio-player-video stays
+                 invisible on mobile, so the two players never collide. -->
+            <video id="amst-video" controls preload="metadata" playsinline hidden></video>
+          </div>
+          <div class="amst-titles">
+            <div id="amst-title" class="amst-title"></div>
+            <div id="amst-artist" class="amst-artist"></div>
+            <div id="amst-collection" class="amst-collection mono"></div>
+          </div>
+          <div class="amst-progress">
+            <input type="range" id="amst-seek" class="amst-seek" min="0" max="1000" value="0" step="1" aria-label="播放进度">
+            <div class="amst-time-row mono">
+              <span id="amst-time-cur">0:00</span>
+              <span id="amst-time-tot">0:00</span>
+            </div>
+          </div>
+          <div class="amst-main-row">
+            <button type="button" id="amst-shuffle" class="amst-aux-btn" title="随机播放">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><polyline points="16,3 21,3 21,8"/><polyline points="16,21 21,21 21,16"/><line x1="3" y1="3" x2="21" y2="21"/><line x1="14" y1="14" x2="21" y2="21"/></svg>
+            </button>
+            <button type="button" id="amst-prev" class="amst-side-btn" title="上一曲">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4h2v16H5zM18 4l-12 8 12 8V4z"/></svg>
+            </button>
+            <button type="button" id="amst-play" class="amst-play-btn" title="播放/暂停">
+              <svg id="amst-play-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l14 8-14 8V4z"/></svg>
+            </button>
+            <button type="button" id="amst-next" class="amst-side-btn" title="下一曲">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 4h2v16h-2zM6 4l12 8-12 8V4z"/></svg>
+            </button>
+            <button type="button" id="amst-loop" class="amst-aux-btn" title="循环模式">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><polyline points="17,1 21,5 17,9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7,23 3,19 7,15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+              <span id="amst-loop-badge" class="amst-loop-badge mono" hidden></span>
+            </button>
+          </div>
+          <div class="amst-aux-row">
+            <button type="button" id="amst-like" class="amst-aux-btn" title="我喜欢">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 21s-7.5-4.7-9.6-9.4C1 7.5 4.5 4 7.5 4c1.7 0 3.4 1 4.5 2.3C13.1 5 14.8 4 16.5 4c3 0 6.5 3.5 5.1 7.6C19.5 16.3 12 21 12 21z"/></svg>
+            </button>
+            <button type="button" id="amst-sleep" class="amst-aux-btn" title="定时关闭">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 15,14"/></svg>
+              <span id="amst-sleep-label-mobile" class="amst-aux-label mono"></span>
+            </button>
+            <button type="button" id="amst-lyrics" class="amst-aux-btn" title="歌词">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M4 7h12M4 12h16M4 17h10"/></svg>
+              <span class="amst-aux-label mono">歌词</span>
+            </button>
+            <button type="button" id="amst-fsub" class="amst-aux-btn" title="悬浮字幕">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><line x1="7" y1="14" x2="11" y2="14"/><line x1="13" y1="14" x2="17" y2="14"/></svg>
+              <span class="amst-aux-label mono">悬浮</span>
+            </button>
+            <button type="button" id="amst-queue" class="amst-aux-btn" title="队列">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="14" y2="18"/></svg>
+              <span class="amst-aux-label mono">队列</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Lyric overlay (mobile): full-screen sheet with blurred cover
+         backdrop. Triggered by 歌词 button in #audio-mobile-stage. The
+         actual lyric DOM (#audio-lyric-list) is reused — we toggle a
+         class on .lyric-panel that re-positions it as a fixed overlay.
+
+         The close button MUST be a sibling of the mask (not a child),
+         otherwise the lyric panel's z-index:9012 covers it inside the
+         mask's stacking context (z-index:9000) and the click never
+         reaches the button. Hoisted to z-index:9100 so it floats above
+         the lyric content. -->
+    <div id="amst-lyric-mask" class="amst-mask" hidden>
+      <div id="amst-lyric-bg" class="amst-mask-bg"></div>
+      <div class="amst-mask-tint"></div>
+    </div>
+    <button type="button" id="amst-lyric-close" class="amst-mask-close" aria-label="关闭歌词" hidden>×</button>
+
+    <!-- Queue bottom sheet (mobile): the existing #audio-sidebar gets
+         positioned as a slide-up sheet via a class toggle. This element
+         is just the dim backdrop + click-to-close target. -->
+    <div id="amst-queue-mask" class="amst-mask amst-mask-dim" hidden></div>
+
+    <!-- ============================================================
+         IMAGE GALLERY VIEWER
+         ============================================================ -->
+    <section id="view-gallery" class="view" hidden>
+      <!-- Admin-only batch toolbar. Hidden until admin clicks 「管理」.
+           Lets admin tick thumbs (or pick a sub-folder) and delete the
+           selected files via the existing episodes/bulk endpoint. -->
+      <div id="gallery-bulk-bar" class="gallery-bulk-bar admin-only perm-delete" hidden>
+        <button type="button" id="gallery-bulk-toggle" class="icon-btn">管理</button>
+        <div id="gallery-bulk-actions" class="gallery-bulk-actions" hidden>
+          <span class="gallery-bulk-info mono">已选 <span id="gallery-bulk-count">0</span></span>
+          <button type="button" id="gallery-bulk-select-all" class="icon-btn">全选</button>
+          <button type="button" id="gallery-bulk-clear" class="icon-btn">全不选</button>
+          <select id="gallery-bulk-folder" class="sort-select" title="按子目录批量选中">
+            <option value="">— 按子目录选 —</option>
+          </select>
+          <button type="button" id="gallery-bulk-delete" class="icon-btn danger">删除选中</button>
+          <button type="button" id="gallery-bulk-exit" class="icon-btn">退出</button>
+        </div>
+      </div>
+      <div id="gallery-grid" class="gallery-grid"></div>
+    </section>
+
+    <!-- IMAGE LIGHTBOX (full-screen slideshow) -->
+    <div id="gallery-lightbox" class="gallery-lightbox" hidden>
+      <div class="gallery-lb-stage">
+        <div class="gallery-lb-zone gallery-lb-zone-left" id="gallery-lb-zone-left"></div>
+        <img id="gallery-lb-img" class="gallery-lb-img" alt="">
+        <div class="gallery-lb-zone gallery-lb-zone-right" id="gallery-lb-zone-right"></div>
+      </div>
+      <div class="gallery-lb-bar mono">
+        <button type="button" id="gallery-lb-prev" class="icon-btn">◀</button>
+        <span id="gallery-lb-counter"></span>
+        <button type="button" id="gallery-lb-next" class="icon-btn">▶</button>
+        <span class="gallery-lb-sep">|</span>
+        <label class="play-switch" title="自动播放"><input type="checkbox" id="gallery-lb-auto"><span class="play-switch-track"></span><span class="play-switch-label">AUTO</span></label>
+        <input type="range" id="gallery-lb-interval" class="gallery-lb-slider" min="1" max="15" value="5" title="自动翻页间隔">
+        <span id="gallery-lb-interval-val" class="gallery-lb-interval-val">5s</span>
+        <label class="play-switch like-switch" title="收藏"><input type="checkbox" id="gallery-lb-like"><span class="play-switch-track like-track"></span><span class="play-switch-label">♡</span></label>
+        <span class="gallery-lb-sep">|</span>
+        <button type="button" id="gallery-lb-close" class="icon-btn">✕</button>
+      </div>
+    </div>
+
+    <!-- SLEEP TIMER POPOVER -->
+    <div id="sleep-popover" class="menu-popover" hidden>
+      <div class="sleep-section">
+        <div class="section-label mono">// 倒计时</div>
+        <div class="sleep-presets">
+          <button type="button" data-sleep-min="15">15 分</button>
+          <button type="button" data-sleep-min="30">30 分</button>
+          <button type="button" data-sleep-min="45">45 分</button>
+          <button type="button" data-sleep-min="60">60 分</button>
+        </div>
+        <div class="sleep-custom">
+          <input type="number" id="sleep-custom-min" min="1" max="720" placeholder="自定义">
+          <button type="button" id="sleep-custom-btn" class="icon-btn">启动</button>
+        </div>
+      </div>
+      <div class="menu-divider"></div>
+      <div class="sleep-section">
+        <div class="section-label mono">// 模式</div>
+        <label class="sleep-mode">
+          <input type="radio" name="sleep-mode" value="hard" checked>
+          <span>硬停 · 到点立即暂停</span>
+        </label>
+        <label class="sleep-mode">
+          <input type="radio" name="sleep-mode" value="soft">
+          <span>软停 · 播完当前曲再停</span>
+        </label>
+        <label class="sleep-mode">
+          <input type="checkbox" id="sleep-fade-input">
+          <span>最后 30s 音量渐出</span>
+        </label>
+      </div>
+      <div class="menu-divider"></div>
+      <button type="button" id="sleep-cancel-btn" class="menu-item danger">
+        <span class="menu-icon" data-icon="trash"></span>
+        <span class="menu-label">取消定时</span>
+      </button>
+    </div>
+
+    <!-- ============================================================
+         NOVEL READER (v1: .txt only — .pdf shows download stub until
+         vendored pdf.js lands)
+         ============================================================ -->
+    <section id="view-novel-reader" class="view" hidden>
+      <div class="novel-reader-toolbar">
+        <button type="button" id="novel-reader-prev" class="icon-btn" title="上一篇">◀ 上一篇</button>
+        <div class="novel-reader-title-wrap">
+          <div id="novel-reader-collection" class="novel-reader-collection mono"></div>
+          <div id="novel-reader-title" class="novel-reader-title"></div>
+        </div>
+        <button type="button" id="novel-reader-next" class="icon-btn" title="下一篇">下一篇 ▶</button>
+        <span class="novel-reader-spacer"></span>
+        <div class="novel-reader-controls">
+          <button type="button" id="novel-font-dec" class="icon-btn" title="缩小字号">A−</button>
+          <button type="button" id="novel-font-inc" class="icon-btn" title="放大字号">A+</button>
+          <span id="novel-progress-pct" class="mono">0%</span>
+        </div>
+      </div>
+      <div id="novel-reader-content" class="novel-reader-content"></div>
+      <div class="novel-reader-progress-bar"><span id="novel-reader-progress-fill"></span></div>
+    </section>
+
+    <!-- ============================================================
+         HISTORY
+         ============================================================ -->
+    <section id="view-history" class="view" hidden>
+      <div class="history-wrap">
+        <div class="history-head">
+          <div class="section-label">// PLAYBACK HISTORY</div>
+          <div class="filter-spacer"></div>
+          <button type="button" id="history-manage-btn" class="icon-btn">管理</button>
+          <button type="button" id="clear-history-btn" class="icon-btn danger">清空</button>
+        </div>
+        <ul id="history-list"></ul>
+      </div>
+    </section>
+
+    <!-- History manage bar -->
+    <div id="history-manage-bar" class="manage-bar" hidden>
+      <div class="manage-bar-info mono">已选 <span id="history-manage-count">0</span> 条</div>
+      <div class="filter-spacer"></div>
+      <button type="button" id="history-all-btn" class="icon-btn">全选</button>
+      <button type="button" id="history-delete-btn" class="icon-btn danger">删除</button>
+      <button type="button" id="history-exit-btn" class="icon-btn">退出管理</button>
+    </div>
+
+    <!-- ============================================================
+         SEARCH (1.2.0+)
+         Standalone search view with multi-field selection (title / tags
+         / keywords / authors / desc) and cross-kind toggle. Whitespace-
+         AND multi-term query. Reachable from a header button or from
+         the home toolbar's "高级搜索 →" link.
+         ============================================================ -->
+    <section id="view-search" class="view" hidden>
+      <div class="search-wrap-page">
+        <div class="search-controls">
+          <div class="search-row">
+            <input type="search" id="search-page-input" placeholder="按 ENTER 搜索；多个词用空格分隔（AND 关系）" autocomplete="off">
+            <button type="button" id="search-page-submit" class="btn-primary">搜索</button>
+          </div>
+          <div class="search-fields">
+            <span class="search-fields-label mono">// 范围：</span>
+            <label><input type="checkbox" name="search-field" value="title" checked> 标题</label>
+            <label><input type="checkbox" name="search-field" value="tags"> 标签</label>
+            <label><input type="checkbox" name="search-field" value="keywords"> 关联字词</label>
+            <label><input type="checkbox" name="search-field" value="authors"> 作者 / 公司</label>
+            <label><input type="checkbox" name="search-field" value="desc"> 简介</label>
+            <label><input type="checkbox" name="search-field" value="episodes"> 集数 / 单曲</label>
+          </div>
+          <div class="search-kinds">
+            <span class="search-fields-label mono">// 板块：</span>
+            <label><input type="radio" name="search-kind" value="all" checked> 全部</label>
+            <label><input type="radio" name="search-kind" value="video"> 视频</label>
+            <label><input type="radio" name="search-kind" value="audio"> 音频</label>
+            <label><input type="radio" name="search-kind" value="image"> 图片</label>
+            <label><input type="radio" name="search-kind" value="novel"> 小说</label>
+          </div>
+          <div class="search-extras admin-only">
+            <label title="包含挂着隐藏标签的合集（admin 专用）"><input type="checkbox" id="search-page-hidden"> 含隐藏</label>
+          </div>
+          <div class="search-status mono" id="search-page-status"></div>
+        </div>
+        <div id="search-page-results" class="search-results"></div>
+      </div>
+    </section>
+
+    <!-- ============================================================
+         ADMIN
+         ============================================================ -->
+    <section id="view-admin" class="view" hidden>
+      <div class="admin-wrap">
+        <div class="admin-tabs">
+          <button type="button" class="admin-tab active" data-admin-tab="users" data-i18n="admin.tab.users">用户</button>
+          <button type="button" class="admin-tab" data-admin-tab="stats" data-i18n="admin.tab.stats">统计</button>
+          <button type="button" class="admin-tab" data-admin-tab="health" data-i18n="admin.tab.health">健康</button>
+          <button type="button" class="admin-tab" data-admin-tab="categories" data-i18n="admin.tab.categories">分类</button>
+          <button type="button" class="admin-tab" data-admin-tab="duplicates" data-i18n="admin.tab.duplicates">重复检查</button>
+          <button type="button" class="admin-tab" data-admin-tab="mkv-queue">MKV 转码队列</button>
+          <div class="filter-spacer"></div>
+          <button type="button" id="rescan-btn" class="icon-btn" data-i18n="admin.rescanMedia">重扫媒体库</button>
+        </div>
+        <div id="admin-tab-users" class="admin-tab-pane">
+          <table class="admin-table" id="admin-users-table">
+            <thead>
+              <tr><th>USERNAME</th><th>ROLE</th><th>CREATED</th><th></th></tr>
+            </thead>
+            <tbody id="admin-users-body"></tbody>
+          </table>
+        </div>
+        <div id="admin-tab-stats" class="admin-tab-pane" hidden>
+          <div class="stats-grid" id="stats-grid"></div>
+          <div class="section-label" style="margin-top:32px">// TOP 5 LARGEST</div>
+          <table class="admin-table" id="stats-top-table">
+            <thead><tr><th>TITLE</th><th>EPISODES</th><th>SIZE</th></tr></thead>
+            <tbody id="stats-top-body"></tbody>
+          </table>
+        </div>
+        <div id="admin-tab-health" class="admin-tab-pane" hidden>
+          <div class="health-actions">
+            <button type="button" id="health-scan-btn" class="icon-btn" data-i18n="admin.health.rescan">重新扫描</button>
+            <button type="button" id="health-clean-btn" class="icon-btn" data-i18n="admin.health.clean">清理孤立数据</button>
+          </div>
+          <div id="health-summary" class="health-summary"></div>
+          <div id="health-details"></div>
+        </div>
+        <div id="admin-tab-categories" class="admin-tab-pane" hidden>
+          <!-- Filter bar above all category editors. Live-filters every
+               kind's tree by label / id / keyword match. Empty input
+               restores full view. The "全部折叠" / "全部展开" buttons
+               batch-toggle every collapse marker for fast macro-level
+               navigation when an admin opens a deeply nested kind. -->
+          <div class="cat-toolbar mono">
+            <input type="search" id="cat-filter-input" class="cat-filter-input" placeholder="快速搜索标签 (按 名称/id/关联字词)" data-i18n-placeholder="adminCat.searchPlaceholder" maxlength="60">
+            <span class="cat-toolbar-sep" aria-hidden="true">|</span>
+            <!-- Config import / export. Currently scoped to the
+                 categories tree; planned to extend to users / globals
+                 as separate sections of the same JSON envelope. -->
+            <button type="button" id="cat-export-btn" class="icon-btn"
+                    data-i18n="admin.cat.exportConfig"
+                    data-i18n-title="admin.cat.exportConfigTitle"
+                    title="把全部分类树导出为 JSON 文件">导出配置</button>
+            <button type="button" id="cat-import-btn" class="icon-btn"
+                    data-i18n="admin.cat.importConfig"
+                    data-i18n-title="admin.cat.importConfigTitle"
+                    title="从 JSON 文件导入分类树（覆盖当前未保存草稿，保存后才会写入服务器）">导入配置</button>
+            <input type="file" id="cat-import-file" accept="application/json,.json" hidden>
+          </div>
+          <!-- Sub-tabs split the four kinds (video / audio / image / novel)
+               into isolated views so admins don't scroll a single combined
+               list through hundreds of entries. The visible kind is the
+               only one rendered into the DOM at any moment; switching is
+               cheap because all four catDraft trees stay in memory.
+               Active kind persisted in ds124:adminCatActiveKind. -->
+          <div class="cat-kind-tabs" role="tablist">
+            <button type="button" class="cat-kind-tab active" data-cat-kind="video" role="tab" aria-selected="true" data-i18n="header.kind.video">视频</button>
+            <button type="button" class="cat-kind-tab" data-cat-kind="audio" role="tab" aria-selected="false" data-i18n="header.kind.audio">音频</button>
+            <button type="button" class="cat-kind-tab" data-cat-kind="image" role="tab" aria-selected="false" data-i18n="header.kind.image">图片</button>
+            <button type="button" class="cat-kind-tab" data-cat-kind="novel" role="tab" aria-selected="false" data-i18n="header.kind.novel">小说</button>
+          </div>
+          <!-- 1.7.0: chip layer model. Per-kind editor is a stack of
+               horizontal chip rows (one row per depth, only visible when
+               the parent chip in selection has revealed it), an inline
+               edit panel for the activeEditId, an empty hint when no
+               chip is active, and a flat search-results list shown only
+               while cat-filter-input has a non-empty query. JS owns the
+               innerHTML of every block below. -->
+          <div class="category-editor" data-cat-kind="video">
+            <div class="section-label cat-section-header">
+              <span data-i18n="admin.cat.section.video">// 视频分类</span>
+              <button type="button" class="icon-btn cat-sort-btn" data-kind="video" data-i18n-title="admin.cat.sortBtnTitle" title="按标签名字母排序整组重排（影响 chip 顺序）">A→Z</button>
+            </div>
+            <div class="cat-layer-stack" data-kind="video"></div>
+            <div class="cat-edit-panel" data-kind="video" hidden></div>
+            <div class="cat-edit-empty" data-kind="video" data-i18n="admin.cat.editEmptyHint">点上方某标签 chip 进入编辑，或点 chip 行末「+ 新建」追加同层标签。</div>
+            <div class="cat-search-results" data-kind="video" hidden></div>
+          </div>
+          <div class="category-editor" data-cat-kind="audio" hidden>
+            <div class="section-label cat-section-header">
+              <span data-i18n="admin.cat.section.audio">// 音频分类</span>
+              <button type="button" class="icon-btn cat-sort-btn" data-kind="audio" data-i18n-title="admin.cat.sortBtnTitle" title="按标签名字母排序整组重排（影响 chip 顺序）">A→Z</button>
+            </div>
+            <div class="cat-layer-stack" data-kind="audio"></div>
+            <div class="cat-edit-panel" data-kind="audio" hidden></div>
+            <div class="cat-edit-empty" data-kind="audio" data-i18n="admin.cat.editEmptyHint">点上方某标签 chip 进入编辑，或点 chip 行末「+ 新建」追加同层标签。</div>
+            <div class="cat-search-results" data-kind="audio" hidden></div>
+          </div>
+          <div class="category-editor" data-cat-kind="image" hidden>
+            <div class="section-label cat-section-header">
+              <span data-i18n="admin.cat.section.image">// 图片分类</span>
+              <button type="button" class="icon-btn cat-sort-btn" data-kind="image" data-i18n-title="admin.cat.sortBtnTitle" title="按标签名字母排序整组重排（影响 chip 顺序）">A→Z</button>
+            </div>
+            <div class="cat-layer-stack" data-kind="image"></div>
+            <div class="cat-edit-panel" data-kind="image" hidden></div>
+            <div class="cat-edit-empty" data-kind="image" data-i18n="admin.cat.editEmptyHint">点上方某标签 chip 进入编辑，或点 chip 行末「+ 新建」追加同层标签。</div>
+            <div class="cat-search-results" data-kind="image" hidden></div>
+          </div>
+          <div class="category-editor" data-cat-kind="novel" hidden>
+            <div class="section-label cat-section-header">
+              <span data-i18n="admin.cat.section.novel">// 小说分类</span>
+              <button type="button" class="icon-btn cat-sort-btn" data-kind="novel" data-i18n-title="admin.cat.sortBtnTitle" title="按标签名字母排序整组重排（影响 chip 顺序）">A→Z</button>
+            </div>
+            <div class="cat-layer-stack" data-kind="novel"></div>
+            <div class="cat-edit-panel" data-kind="novel" hidden></div>
+            <div class="cat-edit-empty" data-kind="novel" data-i18n="admin.cat.editEmptyHint">点上方某标签 chip 进入编辑，或点 chip 行末「+ 新建」追加同层标签。</div>
+            <div class="cat-search-results" data-kind="novel" hidden></div>
+          </div>
+          <div class="category-actions">
+            <button type="button" id="cat-save-btn" class="btn-primary" data-i18n="admin.cat.saveBtn">保存分类</button>
+            <button type="button" id="cat-reset-btn" class="icon-btn" data-i18n="admin.cat.resetBtn">重新加载</button>
+            <span id="cat-save-status" class="mono"></span>
+          </div>
+        </div>
+        <div id="admin-tab-duplicates" class="admin-tab-pane" hidden>
+          <div class="dup-controls">
+            <div class="dup-kinds" role="tablist">
+              <button type="button" class="dup-kind-btn active" data-dup-kind="video" data-i18n="header.kind.video">视频</button>
+              <button type="button" class="dup-kind-btn" data-dup-kind="audio" data-i18n="header.kind.audio">音频</button>
+              <button type="button" class="dup-kind-btn" data-dup-kind="image" data-i18n="header.kind.image">图片</button>
+              <button type="button" class="dup-kind-btn" data-dup-kind="novel" data-i18n="header.kind.novel">小说</button>
+            </div>
+            <div class="dup-modes">
+              <label class="radio">
+                <input type="radio" name="dup-mode" value="suspect" checked>
+                <span data-i18n="admin.dup.suspectMode">嫌疑模式（归一化等同 / 编辑距离 ≤ 2）</span>
+              </label>
+              <label class="radio">
+                <input type="radio" name="dup-mode" value="similarity">
+                <span data-i18n="admin.dup.similarityMode">相似度模式</span>
+              </label>
+            </div>
+            <div class="dup-threshold-row" hidden>
+              <label class="field">
+                <span><span data-i18n="admin.dup.thresholdLabel">相同率阈值</span> <output id="dup-threshold-out" class="mono">70%</output></span>
+                <input type="range" id="dup-threshold" min="50" max="95" step="1" value="70">
+              </label>
+            </div>
+            <div class="dup-actions">
+              <button type="button" id="dup-refresh-btn" class="icon-btn" data-i18n="admin.dup.refresh">刷新</button>
+              <button type="button" id="dup-mark-btn" class="icon-btn" disabled
+                      data-i18n="admin.dup.markBtn"
+                      data-i18n-title="admin.dup.markBtnTitle"
+                      title="选中两个合集后标为非重复，下次扫描跳过该对">标为非重复（需选 2 项）</button>
+              <button type="button" id="dup-whitelist-btn" class="icon-btn" data-i18n="admin.dup.viewWhitelist">查看白名单</button>
+              <span id="dup-status" class="mono"></span>
+            </div>
+          </div>
+          <div id="dup-results" class="dup-results"></div>
+        </div>
+        <!-- ============================================================
+             MKV pretranscode queue dashboard
+             ------------------------------------------------------------
+             Read-only snapshot of /api/hls-queue (queue + active jobs).
+             Auto-refreshes every 5s while the tab is visible. The
+             "刷新" button is mostly redundant but lets the admin force
+             an immediate refresh after enqueueing from elsewhere.
+             ============================================================ -->
+        <div id="admin-tab-mkv-queue" class="admin-tab-pane" hidden>
+          <div class="health-actions">
+            <button type="button" id="mkv-queue-refresh-btn" class="icon-btn">刷新</button>
+            <span id="mkv-queue-status" class="mono"></span>
+          </div>
+          <div class="section-label" style="margin-top:24px">// 当前活跃 ffmpeg</div>
+          <table class="admin-table" id="mkv-queue-active-table">
+            <thead>
+              <tr><th>FILE</th><th>PID</th><th>NICE</th><th>SOURCE</th><th>ELAPSED</th></tr>
+            </thead>
+            <tbody id="mkv-queue-active-body">
+              <tr><td colspan="5" class="mono" style="opacity:0.6">(无)</td></tr>
+            </tbody>
+          </table>
+          <div class="section-label" style="margin-top:32px">// 待转队列</div>
+          <table class="admin-table" id="mkv-queue-pending-table">
+            <thead>
+              <tr><th>FILE</th><th>COLLECTION</th><th>STATUS</th><th>ADDED</th></tr>
+            </thead>
+            <tbody id="mkv-queue-pending-body">
+              <tr><td colspan="4" class="mono" style="opacity:0.6">(空)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- GLOBAL VIDEO ELEMENT (moved between containers) -->
+  <div id="video-portal">
+    <video id="player" controls preload="metadata" playsinline></video>
+    <button id="skip-intro-btn" type="button" class="skip-intro-btn" hidden>跳过片头 ➤</button>
+    <!-- Shown when the video fails to decode (unsupported codec/container)
+         or when the episode's extension is known to be un-playable in any
+         browser (AVI/WMV/FLV/RMVB/RM). Offers a direct download link so
+         the user can fall back to a local player like VLC. -->
+    <div id="player-error-overlay" hidden>
+      <div class="player-error-inner">
+        <div class="player-error-title mono">// FORMAT NOT SUPPORTED</div>
+        <div id="player-error-msg" class="player-error-msg"></div>
+        <a id="player-error-download" class="btn-primary player-error-btn" download>下载文件</a>
+      </div>
+    </div>
+    <!-- HLS bootstrap loading overlay (1.7.40) — briefly shown for
+         mkvs whose audio codec the browser can't decode while we
+         wait for ffmpeg to write the first HLS segment (~5-10s).
+         Once playback starts, hls.js fetches subsequent segments in
+         the background as they finish encoding; the user can play
+         and seek normally without further waiting. The overlay
+         disappears as soon as hls.js says "manifest parsed" —
+         drastically shorter than the 1.7.39 mp4 pre-remux wait. -->
+    <div id="player-loading-overlay" hidden>
+      <div class="player-loading-inner">
+        <div class="player-loading-spinner"></div>
+        <div id="player-loading-msg" class="player-loading-msg mono">正在准备…</div>
+        <div id="player-loading-progress" class="player-loading-progress mono"></div>
+        <div class="player-loading-hint">音频格式不被浏览器原生支持，正在切片为 HLS（前几秒就绪后立即开播，剩余片段后台继续生成，可正常拖动进度条）。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MINI PLAYER (video) -->
+  <div id="mini-player" hidden>
+    <div id="mini-player-slot"></div>
+    <div class="mini-player-info">
+      <div id="mini-player-title" class="mono"></div>
+      <div class="mini-player-actions">
+        <button type="button" id="mini-expand-btn" class="icon-btn">展开</button>
+        <button type="button" id="mini-close-btn" class="icon-btn">×</button>
+      </div>
+    </div>
+    <div class="mini-resize-handle mini-rh-tl" data-rh="tl" aria-hidden="true"></div>
+    <div class="mini-resize-handle mini-rh-tr" data-rh="tr" aria-hidden="true"></div>
+    <div class="mini-resize-handle mini-rh-bl" data-rh="bl" aria-hidden="true"></div>
+    <div class="mini-resize-handle mini-rh-br" data-rh="br" aria-hidden="true"></div>
+  </div>
+
+  <!-- AUDIO MINI PLAYER
+       Shown when audio is playing and the user navigates away from the
+       audio player view. Two rendering modes (state.audioMiniMode):
+         - 'in-browser' (default): position:fixed within the page
+         - 'document-pip': moved into a Chrome Document-Picture-in-Picture
+           window so it floats above other apps. Falls back to in-browser
+           mode on browsers without documentPictureInPicture support. -->
+  <div id="audio-mini-player" hidden>
+    <div id="audio-mini-cover" class="audio-mini-cover"></div>
+    <div class="audio-mini-body">
+      <div id="audio-mini-title" class="audio-mini-title">未在播放</div>
+      <div id="audio-mini-sub" class="audio-mini-sub mono">—</div>
+      <div class="audio-mini-progress" id="audio-mini-scrub">
+        <div id="audio-mini-progress-fill" class="audio-mini-progress-fill"></div>
+      </div>
+      <div class="audio-mini-time mono">
+        <span id="audio-mini-time-cur">0:00</span>
+        <span>/</span>
+        <span id="audio-mini-time-total">0:00</span>
+      </div>
+    </div>
+    <div class="audio-mini-actions">
+      <button type="button" id="audio-mini-prev" class="icon-btn" title="上一首">◀</button>
+      <button type="button" id="audio-mini-play" class="icon-btn" title="播放/暂停">▶</button>
+      <button type="button" id="audio-mini-next" class="icon-btn" title="下一首">▶|</button>
+      <button type="button" id="audio-mini-expand" class="icon-btn" title="展开">展开</button>
+      <button type="button" id="audio-mini-close" class="icon-btn" title="关闭">×</button>
+    </div>
+  </div>
+
+  <!-- MANAGE-MODE BOTTOM BAR -->
+  <div id="manage-bar" class="manage-bar" hidden>
+    <div class="manage-bar-info mono">已选 <span id="manage-count">0</span> 项</div>
+    <div class="filter-spacer"></div>
+    <button type="button" id="manage-all-btn" class="icon-btn">全选</button>
+    <button type="button" id="manage-move-btn" class="icon-btn">移动到...</button>
+    <button type="button" id="manage-copy-btn" class="icon-btn">复制到...</button>
+    <button type="button" id="manage-delete-btn" class="icon-btn danger">删除</button>
+    <button type="button" id="manage-exit-btn" class="icon-btn">退出管理</button>
+  </div>
+
+  <!-- EPISODE SUBMENU POPOVER -->
+  <div id="ep-menu" class="ep-menu" hidden>
+    <button type="button" class="menu-item" data-ep-action="edit">
+      <span class="menu-icon" data-icon="edit"></span>
+      <span class="menu-label">编辑</span>
+    </button>
+    <button type="button" class="menu-item" data-ep-action="upload-subtitle">
+      <span class="menu-icon" data-icon="upload"></span>
+      <span class="menu-label">上传字幕 / 歌词</span>
+    </button>
+    <button type="button" class="menu-item" data-ep-action="move">
+      <span class="menu-icon" data-icon="move"></span>
+      <span class="menu-label">移动到...</span>
+    </button>
+    <button type="button" class="menu-item" data-ep-action="copy">
+      <span class="menu-icon" data-icon="copy"></span>
+      <span class="menu-label">复制到...</span>
+    </button>
+    <div class="menu-divider"></div>
+    <button type="button" class="menu-item danger" data-ep-action="delete">
+      <span class="menu-icon" data-icon="trash"></span>
+      <span class="menu-label">删除</span>
+    </button>
+  </div>
+
+  <!-- Hidden subtitle file picker (used by per-episode subtitle upload) -->
+  <input type="file" id="subtitle-upload-input" hidden
+         accept=".srt,.vtt,.lrc,.ass,.ssa,.txt">
+
+
+  <!-- TOAST CONTAINER -->
+  <div id="toast-container"></div>
+
+  <!-- Shared author autocomplete source. Populated by loadAuthorSuggestions
+       on dialog open (and after creates that introduce a new author).
+       Browsers render this as a dropdown for any <input list="authors-datalist">. -->
+  <datalist id="authors-datalist"></datalist>
+
+  <!-- DIALOGS -->
+  <dialog id="create-dialog" class="dialog">
+    <form id="create-form" method="dialog">
+      <div class="dialog-title">// NEW COLLECTION</div>
+      <label class="field">
+        <span>标题</span>
+        <input name="title" required maxlength="80">
+      </label>
+      <fieldset class="field field-types" id="create-types">
+        <legend>类型（可多选，第一个为主标签）</legend>
+        <div class="types-checkbox-list" data-list="create"></div>
+      </fieldset>
+      <fieldset class="field field-authors">
+        <legend>作者 / 公司（可选，多个；回车/逗号添加；输入时显示已用条目）</legend>
+        <div class="authors-chip-list" data-list="create"></div>
+        <input type="text" class="author-input" data-list="create" list="authors-datalist" placeholder="输入作者 / 公司名，回车添加" maxlength="80">
+      </fieldset>
+      <label class="field">
+        <span>简介</span>
+        <textarea name="description" rows="3" maxlength="500"></textarea>
+      </label>
+      <div class="dialog-error" id="create-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="create-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary">创建</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="edit-dialog" class="dialog">
+    <form id="edit-form" method="dialog">
+      <div class="dialog-title">// EDIT COLLECTION</div>
+      <label class="field">
+        <span>标题</span>
+        <input name="title" required maxlength="200">
+      </label>
+      <fieldset class="field field-types" id="edit-types">
+        <legend>类型（可多选，第一个为主标签）</legend>
+        <div class="types-checkbox-list" data-list="edit"></div>
+        <button type="button" id="edit-auto-detect-btn" class="icon-btn" title="按当前标题命中所有分类的关联字词，未勾选的命中标签自动追加（不动你已经手动选/取消的）">按关联字词识别</button>
+      </fieldset>
+      <fieldset class="field field-authors">
+        <legend>作者 / 公司（可选，多个；回车/逗号添加）</legend>
+        <div class="authors-chip-list" data-list="edit"></div>
+        <input type="text" class="author-input" data-list="edit" list="authors-datalist" placeholder="输入作者 / 公司名，回车添加" maxlength="80">
+      </fieldset>
+      <label class="field">
+        <span>简介</span>
+        <textarea name="description" rows="3" maxlength="500"></textarea>
+      </label>
+      <label class="field checkbox">
+        <input type="checkbox" name="hiddenFlag">
+        <span>隐藏此合集（不在首页显示，但直接链接仍可访问）</span>
+      </label>
+      <!-- Per-collection resume policy. Only shown for audio
+           collections (openEditDialog toggles the hidden flag). Two
+           radio options: 继续上次进度 / 从头开始播放. -->
+      <fieldset class="field field-resume-mode" id="edit-resume-mode" hidden>
+        <legend>播放模式</legend>
+        <label class="radio">
+          <input type="radio" name="resumeMode" value="continue">
+          <span>继续上次进度（默认）</span>
+        </label>
+        <label class="radio">
+          <input type="radio" name="resumeMode" value="restart">
+          <span>从头开始播放</span>
+        </label>
+      </fieldset>
+      <div class="dialog-error" id="edit-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="edit-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="episode-edit-dialog" class="dialog">
+    <form id="episode-edit-form" method="dialog">
+      <div class="dialog-title">// EDIT EPISODE</div>
+      <div id="episode-edit-file" class="dialog-subtitle mono"></div>
+      <label class="field">
+        <span>集标题</span>
+        <input name="title" maxlength="200">
+      </label>
+      <label class="field">
+        <span>简介</span>
+        <textarea name="description" rows="2" maxlength="500"></textarea>
+      </label>
+      <label class="field">
+        <span>顺序（数字，越小越靠前，留空=自然排序）</span>
+        <input name="order" type="number" step="1" min="0">
+      </label>
+      <div class="dialog-error" id="episode-edit-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="episode-edit-delete" class="icon-btn danger">删除此集</button>
+        <div class="filter-spacer"></div>
+        <button type="button" id="episode-edit-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="intro-dialog" class="dialog">
+    <form id="intro-form" method="dialog">
+      <div class="dialog-title">// INTRO SKIP</div>
+      <div class="dialog-subtitle">观众在每集前多少秒内可以点"跳过片头"按钮。设 0 关闭。</div>
+      <label class="field">
+        <span>片头秒数</span>
+        <input name="introSkipSec" type="number" step="1" min="0" max="600">
+      </label>
+      <div class="dialog-error" id="intro-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="intro-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="passwd-dialog" class="dialog">
+    <form id="passwd-form" method="dialog">
+      <div class="dialog-title">// CHANGE PASSWORD</div>
+      <label class="field">
+        <span>原密码</span>
+        <input name="oldPassword" type="password" required maxlength="128">
+      </label>
+      <label class="field">
+        <span>新密码</span>
+        <input name="newPassword" type="password" required maxlength="128">
+      </label>
+      <div class="dialog-error" id="passwd-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="passwd-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="cover-dialog" class="dialog cover-dialog">
+    <form id="cover-form" method="dialog">
+      <div class="dialog-title">// SET COVER</div>
+      <div class="dialog-subtitle">选择合集文件夹内的图片作为封面，或上传一张新的。</div>
+      <div class="cover-current">
+        <div class="cover-current-label mono">当前封面:</div>
+        <div class="cover-current-name mono" id="cover-current-name">(无)</div>
+      </div>
+      <!-- Admin-only batch toolbar above the cover grid. Opens a
+           multi-select mode where each thumb gets a ✓ overlay and
+           clicking ticks instead of selecting as cover; submit goes
+           through the existing episodes/bulk endpoint. -->
+      <div class="cover-bulk-bar admin-only perm-delete">
+        <button type="button" id="cover-bulk-toggle" class="icon-btn">管理图片</button>
+        <div id="cover-bulk-actions" class="cover-bulk-actions" hidden>
+          <span class="cover-bulk-info mono">已选 <span id="cover-bulk-count">0</span></span>
+          <button type="button" id="cover-bulk-select-all" class="icon-btn">全选</button>
+          <button type="button" id="cover-bulk-clear" class="icon-btn">全不选</button>
+          <button type="button" id="cover-bulk-delete" class="icon-btn danger" disabled>删除选中</button>
+          <button type="button" id="cover-bulk-exit" class="icon-btn">退出</button>
+        </div>
+      </div>
+      <div class="cover-grid" id="cover-grid"></div>
+      <input id="cover-upload-input" type="file" accept=".jpg,.jpeg,.png,.webp,.gif,.bmp,.avif" hidden>
+      <div class="cover-editor" id="cover-editor" hidden>
+        <div class="cover-editor-label">调整封面裁切 · 在预览里拖拽移动 · 滚轮缩放</div>
+        <div class="cover-editor-previews" id="cover-editor-previews">
+          <div class="cover-preview cover-preview-detail">
+            <div class="cover-preview-caption">详情页封面 2:3</div>
+            <div class="cover-preview-frame" data-preview="detail"></div>
+          </div>
+          <div class="cover-preview cover-preview-card">
+            <div class="cover-preview-caption">合集卡片 16:10</div>
+            <div class="cover-preview-frame" data-preview="card"></div>
+          </div>
+          <div class="cover-preview cover-preview-mini">
+            <div class="cover-preview-caption">缩略卡封面 16:10</div>
+            <div class="cover-preview-frame" data-preview="mini"></div>
+          </div>
+        </div>
+        <div class="cover-editor-controls">
+          <label>缩放
+            <input type="range" id="cover-scale-range" min="1" max="3" step="0.02" value="1">
+            <span class="cover-editor-value" id="cover-scale-val">1.00x</span>
+          </label>
+          <button type="button" id="cover-reset-crop" class="icon-btn">重置</button>
+        </div>
+      </div>
+      <!-- Video frame picker panel (shown when "从视频截帧" is clicked) -->
+      <div id="cover-frame-panel" hidden>
+        <div class="section-label mono">// 播放视频 → 暂停 → 截取当前帧</div>
+        <div class="cover-frame-controls">
+          <select id="cover-frame-select" class="sort-select"></select>
+          <button type="button" id="cover-frame-capture" class="btn-primary mono" disabled>截取当前帧</button>
+          <button type="button" id="cover-frame-close" class="icon-btn">关闭</button>
+        </div>
+        <video id="cover-frame-video" class="cover-frame-video" controls preload="metadata"></video>
+      </div>
+      <div class="dialog-error" id="cover-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="cover-auto" class="icon-btn">自动选择</button>
+        <button type="button" id="cover-upload-trigger" class="icon-btn">上传新图</button>
+        <button type="button" id="cover-capture-frame" class="icon-btn" hidden>从视频截帧</button>
+        <button type="button" id="cover-extract-audio" class="icon-btn" hidden>从音频提取</button>
+        <div class="filter-spacer"></div>
+        <button type="button" id="cover-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="bulk-target-dialog" class="dialog">
+    <form id="bulk-target-form" method="dialog">
+      <div class="dialog-title" id="bulk-target-title">// MOVE TO</div>
+      <div class="dialog-subtitle" id="bulk-target-subtitle"></div>
+      <label class="field">
+        <span>目标合集</span>
+        <select id="bulk-target-select"></select>
+      </label>
+      <div class="dialog-error" id="bulk-target-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="bulk-target-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary" id="bulk-target-ok">执行</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="visible-cats-dialog" class="dialog">
+    <form id="visible-cats-form" method="dialog">
+      <div class="dialog-title">// USER VISIBLE CATEGORIES</div>
+      <div class="dialog-subtitle mono">用户：<span id="visible-cats-user"></span></div>
+      <div id="visible-cats-body" class="vc-body"></div>
+      <div class="dialog-actions">
+        <button type="button" id="visible-cats-cancel" class="icon-btn">取消</button>
+        <button type="button" id="visible-cats-save" class="btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Admin: per-user content-action permission toggles. Admin role
+       bypasses all four gates so this dialog only matters for role:user
+       accounts. Default for new users is all-off; admin clicks here to
+       grant. -->
+  <dialog id="user-perms-dialog" class="dialog">
+    <form id="user-perms-form" method="dialog">
+      <div class="dialog-title">// USER PERMISSIONS</div>
+      <div class="dialog-subtitle mono">用户：<span id="user-perms-user"></span></div>
+      <div class="vc-body">
+        <label class="vc-row">
+          <input type="checkbox" data-perm="upload">
+          <span>上传文件到合集</span>
+          <span class="mono vc-id">upload</span>
+        </label>
+        <label class="vc-row">
+          <input type="checkbox" data-perm="create">
+          <span>创建新合集</span>
+          <span class="mono vc-id">create</span>
+        </label>
+        <label class="vc-row">
+          <input type="checkbox" data-perm="modify">
+          <span>修改合集元数据（标题/描述/标签/封面/片头）</span>
+          <span class="mono vc-id">modify</span>
+        </label>
+        <label class="vc-row">
+          <input type="checkbox" data-perm="delete">
+          <span>删除合集 + episode 重命名/移动/删除/改顺序</span>
+          <span class="mono vc-id">delete</span>
+        </label>
+        <div class="mono" style="color:var(--text-dim);margin-top:12px">admin 角色自动拥有全部权限，此处仅对 role:user 生效</div>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" id="user-perms-cancel" class="icon-btn">取消</button>
+        <button type="button" id="user-perms-save" class="btn-primary">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="audio-upload-dialog" class="dialog">
+    <form id="audio-upload-form" method="dialog">
+      <div class="dialog-title">// UPLOAD AUDIO</div>
+      <label class="field">
+        <span>目标合集</span>
+        <select name="target" id="audio-upload-target"></select>
+      </label>
+      <label class="field">
+        <span>文件（支持音频 / 封面 / 歌词字幕）</span>
+        <!-- Accept list MUST stay in sync with config.js AUDIO_EXTS + LYRIC_EXTS
+             + IMAGE_EXTS. No audio/* or image/* wildcards: those silently let
+             through stuff the server rejects (e.g. .tiff, .mid) and confuse
+             users. Strict explicit extensions keep the file picker filter
+             matching what the upload endpoint will actually accept. -->
+        <input type="file" id="audio-upload-files" name="files" multiple
+               accept=".mp3,.m4a,.aac,.flac,.wav,.ogg,.oga,.opus,.wma,.ape,.alac,.aiff,.aif,.vtt,.srt,.ass,.ssa,.lrc,.txt,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif">
+      </label>
+      <div id="audio-upload-progress" class="dialog-subtitle mono" hidden></div>
+      <div class="dialog-error" id="audio-upload-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="audio-upload-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary" id="audio-upload-submit">上传</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="dialog">
+    <form id="confirm-form" method="dialog">
+      <div class="dialog-title" id="confirm-title">// CONFIRM</div>
+      <div class="dialog-subtitle" id="confirm-message"></div>
+      <div class="dialog-actions">
+        <button type="button" id="confirm-cancel" class="icon-btn">取消</button>
+        <button type="button" id="confirm-ok" class="btn-primary">确认</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="dup-whitelist-dialog" class="dialog">
+    <form id="dup-whitelist-form" method="dialog">
+      <div class="dialog-title">// 重复白名单</div>
+      <div class="dialog-subtitle mono" id="dup-whitelist-subtitle"></div>
+      <div id="dup-whitelist-list" class="dup-whitelist-list"></div>
+      <div class="dialog-actions">
+        <button type="button" id="dup-whitelist-close" class="btn-primary">关闭</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Per-collection transcode picker. v1.10.0+: clicking the
+       collection-card transcode button opens this modal, which
+       lists every .mkv in the collection with its current HLS
+       cache state. Admin ticks rows to enqueue. Selecting an
+       already-cached row implies "re-transcode" (force flag wipes
+       the old cache before re-enqueueing). Background scan
+       intentionally skipped — the modal is lightweight (cache-
+       state only, no ffprobe). -->
+  <dialog id="transcode-modal" class="dialog transcode-modal">
+    <form id="transcode-form" method="dialog">
+      <div class="dialog-title">// 转码 mkv (音轨修复)</div>
+      <div class="dialog-subtitle mono" id="transcode-subtitle">加载中…</div>
+      <div class="transcode-warning">
+        ⚠ 注意：转码仅用于「mkv 导入且浏览器播放时没有声音」的修复场景。
+        如果文件本身能正常播放（有画面有声音），<b>请勿</b>转码 —
+        转码不会让画质更好，只会占用 NAS CPU 与缓存空间。
+      </div>
+      <div class="transcode-toolbar">
+        <button type="button" class="icon-btn" id="transcode-select-needed">勾选未转码</button>
+        <button type="button" class="icon-btn" id="transcode-select-all">全选</button>
+        <button type="button" class="icon-btn" id="transcode-clear-sel">全不选</button>
+        <span class="transcode-count mono">已选 <span id="transcode-selected-count">0</span></span>
+      </div>
+      <div id="transcode-list" class="transcode-list"></div>
+      <div class="dialog-error" id="transcode-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="transcode-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary" id="transcode-submit">加入队列</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Image preview lightbox used by the file-tree view. Opened by
+       renderFileTree click handlers, closed on background click or ESC. -->
+  <div id="img-preview" class="img-preview" hidden>
+    <img id="img-preview-img" alt="preview">
+    <div id="img-preview-caption" class="mono"></div>
+  </div>
+
+  <!-- Collection bulk-manage toolbar overlay. Shown on the home page
+       when admin enters bulk-manage mode. Sticky bottom bar with N
+       selected count and three batch actions. -->
+  <div id="bulk-col-bar" class="bulk-col-bar" hidden>
+    <div class="bulk-col-bar-info mono">
+      已选 <span id="bulk-col-count">0</span> 个合集
+    </div>
+    <div class="bulk-col-bar-actions">
+      <button type="button" class="icon-btn" id="bulk-col-select-all">全选</button>
+      <button type="button" class="icon-btn" id="bulk-col-clear-sel">全不选</button>
+      <button type="button" class="icon-btn" id="bulk-col-retag">改标签</button>
+      <button type="button" class="icon-btn" id="bulk-col-authors">改作者 / 公司</button>
+      <button type="button" class="icon-btn" id="bulk-col-resume">播放模式</button>
+      <button type="button" class="icon-btn" id="bulk-col-pretranscode">预转 mkv</button>
+      <button type="button" class="icon-btn danger" id="bulk-col-delete">删除</button>
+      <button type="button" class="icon-btn" id="bulk-col-exit">退出</button>
+    </div>
+  </div>
+
+  <!-- Bulk re-tag dialog: chip multi-select, mirrors create/edit
+       dialogs. Submit issues PATCH {types:[...]} per selected
+       collection — first chip is primary. -->
+  <dialog id="bulk-retag-dialog" class="dialog">
+    <form id="bulk-retag-form" method="dialog">
+      <div class="dialog-title">// BULK RE-TAG</div>
+      <div class="dialog-subtitle mono" id="bulk-retag-subtitle"></div>
+      <fieldset class="field field-types">
+        <legend>类型（可多选，第一个为主标签）</legend>
+        <div class="types-checkbox-list" data-list="bulk-retag"></div>
+      </fieldset>
+      <div class="dialog-error" id="bulk-retag-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="bulk-retag-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary" id="bulk-retag-ok">应用</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Quick "add child tag" dialog. Lets admin create a child tag in-place
+       from any node's "+ 子" button, instead of scrolling to the section
+       footer to fill the bottom add-row. parentId is locked from the
+       node that opened it. Keywords stay editable inline after creation. -->
+  <dialog id="cat-add-child-dialog" class="dialog">
+    <form id="cat-add-child-form" method="dialog">
+      <div class="dialog-title" data-i18n="admin.cat.dialog.title">// 新建子标签</div>
+      <div class="dialog-subtitle mono" id="cat-add-child-subtitle"></div>
+      <label class="field">
+        <span data-i18n="admin.cat.dialog.idLabel">id（英文 / 数字 / _ / -，唯一）</span>
+        <input type="text" id="cat-add-child-id" maxlength="40" required autocomplete="off">
+      </label>
+      <label class="field">
+        <span data-i18n="admin.cat.dialog.labelLabel">标签名（如 同人）</span>
+        <input type="text" id="cat-add-child-label" maxlength="40" required autocomplete="off">
+      </label>
+      <div class="dialog-error" id="cat-add-child-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="cat-add-child-cancel" class="icon-btn" data-i18n="admin.cat.dialog.cancelBtn">取消</button>
+        <button type="submit" class="btn-primary" id="cat-add-child-ok" data-i18n="admin.cat.dialog.okBtn">添加</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- 1.7.29 removed the standalone manual-subtitle-dialog wholesale.
+       Subtitle selection now lives inside Plyr's settings popup as the
+       custom 字幕 menu item (see initPlyr's ready handler in app.js).
+       Font-size adjustment moved to the global 字幕字号 cycle entry in
+       the main menu popover (subSize handling). -->
+
+  <!-- Bulk authors dialog. Three modes: append (merge new into each
+       collection's existing list, dedup), replace (overwrite list),
+       clear (empty out the list on every selected collection). -->
+  <dialog id="bulk-authors-dialog" class="dialog">
+    <form id="bulk-authors-form" method="dialog">
+      <div class="dialog-title">// BULK AUTHORS</div>
+      <div class="dialog-subtitle mono" id="bulk-authors-subtitle"></div>
+      <fieldset class="field field-radio">
+        <legend>模式</legend>
+        <label><input type="radio" name="bulk-authors-mode" value="append" checked> 追加（合并去重）</label>
+        <label><input type="radio" name="bulk-authors-mode" value="replace"> 替换（用下方列表覆盖）</label>
+        <label><input type="radio" name="bulk-authors-mode" value="clear"> 清空（忽略下方输入）</label>
+      </fieldset>
+      <fieldset class="field field-authors">
+        <legend>作者 / 公司（回车 / 逗号添加；清空模式下忽略）</legend>
+        <div class="authors-chip-list" data-list="bulk-authors"></div>
+        <input type="text" class="author-input" data-list="bulk-authors" list="authors-datalist" placeholder="输入作者 / 公司名，回车添加" maxlength="80">
+      </fieldset>
+      <div class="dialog-error" id="bulk-authors-error"></div>
+      <div class="dialog-actions">
+        <button type="button" id="bulk-authors-cancel" class="icon-btn">取消</button>
+        <button type="submit" class="btn-primary" id="bulk-authors-ok">应用</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js?v=__BUILD__"></script>
+</body>
+</html>

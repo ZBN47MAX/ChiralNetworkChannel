@@ -1,0 +1,66 @@
+/**
+ * @file light.css
+ * @brief Light "monochrome blueprint wireframe" theme.
+ *
+ * Companion to `dark.css`. Read that file's @section blocks for the
+ * variable contract and the steps to add a new theme — this file just
+ * fills in a different palette under the same names.
+ *
+ * @note As of 1.7.1 the main `style.css` still carries ~30 hard-coded
+ *       light overrides under `:root[data-theme="light"] .selector { color: #xxx }`
+ *       (e.g. `.card-name { color: #000000 }`, `#player-container { background: #0a0a0a }`).
+ *       Those are layout-specific tweaks that have not yet been hoisted
+ *       to variables. New themes will need to either add their own
+ *       parallel overrides in `style.css` or wait for the cleanup pass
+ *       that promotes those colors to fresh variable slots.
+ */
+
+/**
+ * @brief Variable palette — light theme.
+ *
+ * Pure black-on-white wireframe aesthetic: every accent collapses to
+ * black, status colors collapse to dark gray, scrims invert from
+ * black to white. Reads like a printed blueprint.
+ */
+:root[data-theme="light"] {
+  /* Display name — see comment in `dark.css` for the contract.
+     Recommended max length: ~12 characters. */
+  --theme-name:    "Light";
+
+  /* Surfaces — very tight grayscale ladder, almost flat. */
+  --bg:            #f6f6f6;
+  --surface:       #ffffff;
+  --surface-2:     #f0f0f0;
+  --hover:         #e8e8e8;
+  --active:        #d8d8d8;
+
+  /* Borders — sharp near-black for wireframe pop. */
+  --border:        #222222;
+  --border-strong: #000000;
+
+  /* Foreground hierarchy — three tiers of gray. */
+  --text:          #000000;
+  --text-dim:      #555555;
+  --text-faint:    #999999;
+
+  /* Accent / focus — also black; the light theme intentionally
+     refuses a brand color, leaning into pure monochrome. */
+  --accent:        #000000;
+  --accent-dim:    #555555;
+  --focus:         #000000;
+
+  /* Status — muted gray; error / success differentiate by icon, not
+     hue, in this theme. */
+  --danger:        #333333;
+  --success:       #333333;
+
+  /* Scrims — inverted (white-tinted) so dialogs read as a paper sheet
+     dropped over the blueprint. */
+  --scrim-deep:    rgba(255, 255, 255, 0.92);
+  --scrim-mid:     rgba(255, 255, 255, 0.60);
+  --scrim-light:   rgba(255, 255, 255, 0.15);
+
+  /* Composite shadow — single hairline border, no blur, matching the
+     flat blueprint feel. */
+  --panel-shadow:  0 0 0 1px var(--border);
+}

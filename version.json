@@ -1,0 +1,1112 @@
+{
+  "version": "Release1.10.1",
+  "versionNums": "1.10.1",
+  "changelog": [
+    {
+      "version": "Release1.10.1",
+      "date": "2026-05-11",
+      "changes": [
+        "UX：转码 modal 顶部新增固定 warning banner — 醒目提醒「转码仅用于 mkv 导入且浏览器没声音的修复场景，正常能播请勿转码」。public/index.html transcode-modal 在 dialog-subtitle 下方插 .transcode-warning 块（黄色 amber border-left + 半透明背景）；public/style.css 加配套样式。Why：v1.10.0 服务端转码只修音轨（视频 copy）后，用户偶尔仍把整库全量入队「以防万一」，浪费 NAS CPU 与缓存空间。每次打开 dialog 都看到这段说明，习惯性误用率应该降下来",
+        "UX：批量管理「预转 mkv」按钮（#bulk-col-pretranscode）点击后新增 window.confirm，文案重复一遍同样的「正常能播请勿转码」逻辑 + 已选合集数告知。Why：批量入口风险面比单合集 modal 更大（一次几十个合集），明文二次确认拦一道",
+        "UX：字幕字号 cycle 上限从 2.0x 提升到 3.0x。public/app.js cycle-sub-size stops 数组从 [0.6, 0.8, 1.0, 1.4, 2.0] 扩展为 [0.6, 0.8, 1.0, 1.4, 2.0, 2.4, 2.7, 3.0]；applySubScale 的 Math.min(2.5, n) 改为 Math.min(3.0, n)，state.subScale 注释里的「0.5-2.5」同步改为「0.5-3.0」。Why：用户反馈 2.0x 在远距离看电视棒 / 投屏场景仍偏小，3.0x 才够",
+        "文档：README.zh.md / README.en.md 字幕章节加段「外挂字幕加载延迟」说明 — 大字幕（带样式 .ass / Blu-ray .sup）需 1-3 秒 fetch + 浏览器 parse + mount，期间画面在播字幕暂无属正常现象；并提醒用户不要反复切换字幕选单（每次切换都重新 fetch 反而更慢）。Why：用户在 已知问题汇总.txt 明确要求把这条提示写进说明文档"
+      ]
+    },
+    {
+      "version": "Release1.10.0",
+      "date": "2026-05-11",
+      "changes": [
+        "转码语义变更：转码现在只负责修复音轨，不再做视频。lib/ffmpeg.js startHlsTranscode 统一 `-c:v copy` 把源视频比特流原样塞进 .ts 容器，移除 libx264 / preset / crf / pix_fmt 分支。保留 +genpts / dplii / make_zero 音轨修复链。Why：DS124 ARM A55 跑 libx264 ultrafast 在 1080p HEVC 上只能到 ~0.4-0.5x realtime，一部 2 小时电影要 4-5 小时墙时，用户多次反馈跑不完。改 audio-only 后转码到 5-10x realtime，5-15 分钟搞定一部。代价是 HEVC 源的 .ts segment 装 HEVC 比特流，只有 Safari / Edge / 较新 Chromium（带 HEVC 硬件解码）能播，Firefox / 老 Chromium 看不到视频。用户 2026-05-11 明确接受这个取舍。",
+        "前端：合集卡（detail toolbar）#act-pretranscode 按钮点击后不再直接 POST 全量入队，改为弹出 transcode-modal。Modal 列出该合集递归扫到的所有 .mkv 文件，每行展示 文件名 / 子目录 / 当前 HLS cache 状态（已转码 / 缓存残缺 / 队列中 / 转码中 / 未转码）/ 文件大小。复选框默认勾未转码 + 缓存残缺；已转码 / 缓存残缺 / 未转码 可勾选，转码中 / 队列中 不可勾。提供 全选 / 全不选 / 勾选未转码 三个快捷键。",
+        "前端：modal 提交时如果选中的文件里有已完整转码的（cacheStatus='cached'），弹 confirm 提示「重新转码会删除现有缓存」；确认后 POST 带 `force:true`，由服务端 deleteCacheForKey + killRunningJob 清旧缓存再入队",
+        "服务端：新增 GET /api/collection/:id/mkv-status，递归列出合集所有 mkv 文件 + 当前 HLS cache 状态（cached / cached-partial / queued / running / none）。故意不跑 ffprobe（100+ 文件会让 modal 卡 30 秒），cache state 足够 UI 用",
+        "服务端：POST /api/collection/:id/pretranscode-mkv 接收 body `{files?: string[], force?: boolean}`：无 files = batch 模式（原行为，遍历整个合集 + ffprobe 跳过音轨已 OK 的）；有 files = 选择模式（只入队这些 rel path，跳过 audio probe 因为用户已显式选）。force=true 在任一模式下都先 killRunningJob + hlsQueue.delete + deleteCacheForKey 清现场再入队",
+        "服务端：/api/episode/:id/hls-start 的 'not-needed' 判定从 `audioOK && videoOK && audioStreamIndex==null` 改为 `audioOK && audioStreamIndex==null`。视频 codec 不再决定是否转码（反正现在视频永远 copy，输出和输入一样）。HLS_COPY_VIDEO_CODECS 常量删除，仅保留 HLS_SAFE_AUDIO_CODECS",
+        "服务端：tickHlsQueue 不再在 spawn 前 ffprobe 决定 videoCopy（永远 copy）。startHlsTranscode 调用去掉 videoCopy 参数",
+        "服务端：新增 walkCollectionMkvs 工具函数，pretranscode-mkv 和 mkv-status 共用同一份递归遍历逻辑（用 forward-slash 相对路径，平台一致）",
+        "服务端：新增 deleteCacheForKey(key) + killRunningJob(key) 两个工具函数支撑 force 重转。killRunningJob POSIX 路径 SIGTERM pgid 后 1.5s SIGKILL 兜底，Windows dev 走 ChildProcess.kill",
+        "批量管理（bulk-col-bar）的 #bulk-col-pretranscode 「预转 mkv」按钮 **保留**，行为不变（server 端 batch 模式）。一处批量入口 + 一处合集卡精选入口 是两个独立的工作流",
+        "字段兼容：server pretranscode-mkv 响应里新增 skippedAudioOK 字段，同时保留 skippedH264 作为 alias（bulk-col-bar 还在读旧字段，避免一次性改动太大）"
+      ]
+    },
+    {
+      "version": "Release1.9.3",
+      "date": "2026-05-11",
+      "changes": [
+        "Bug 修复（v1.9.2 跟进）：1.9.2 服务端 dplii + genpts 修复后 Rick and Morty S08E01（H.264 + EAC3 5.1）转完 cache 浏览器播有声音 ✓ 验证服务端 OK；但用户报告 Bohemian Rhapsody（HEVC + EAC3 7.1）和 Invincible 无敌少侠 S01E01（H.264 + EAC3 5.1）仍没声音。Root cause：这两个文件 cache 还在 queue pending 状态（前面排着 F1 转 4 小时），用户点播时 v1.9 server 返回 status:'transcoding' / 'queued'，但前端 startHlsAndWait 旧逻辑只识别 'streaming' / 'ready' / 'not-needed'，遇到这两个新 status 直接返回 null，caller 把 null 当作\"不需要 HLS\"路径 fallback 到 /media native byte-range serve — 浏览器拿到原始 mkv，H.264 视频能解但 EAC3 audio 浏览器没解码器，呈现\"视频能动但完全没声音\"",
+        "修法 1：public/app.js startHlsAndWait 新增 status:'transcoding' / 'queued' 处理分支。看到这两态时 throw 一个 tagged Error（code='transcoding-pending'，detail 字段挂 server 回的 segments / position / queueSize），不再 silently 返回 null",
+        "修法 2：caller 改 try/catch 判断 e.code === 'transcoding-pending'，拿到 detail → toast 显示「视频排队中（第 N/M 位）」/ 「视频转码进行中，已完成 N 段」 + return 终止整个 player 流程，**绝不** fallback 到 native byte-range 路径",
+        "修法 3：新增 formatTranscodingMessage(detail) helper 集中两处 caller（首播 + 切音轨）的 toast 文案",
+        "Why：用户原话「波西米亚，无敌少侠S1，瑞克与莫蒂S8没有声音，F1，黑客帝国，疾速追杀1，蜘蛛侠有声音」+「瑞莫的有了，无敌少侠S1和波狂还是没有」。Rick and Morty 验证服务端 OK，剩下两个等转完会自然 OK；这次改动是为了防止下次有新 multi-channel mkv 入队时用户再次困惑「为什么没声音」",
+        "未改动：服务端 1.9.2 的 ffmpeg 命令链（dplii + genpts + make_zero）保留不动，已验证 work"
+      ]
+    },
+    {
+      "version": "Release1.9.2",
+      "date": "2026-05-11",
+      "changes": [
+        "Bug 修复（v1.9.1 跟进）：v1.9.1 的 dplii downmix 矩阵让 cache 里 audio 不再静音（实测 mean -28.9 dB / max -8.3 dB 正常对话音量），但浏览器仍听不到声音 + 音轨菜单空白。Root cause：HLS seg00000.ts 继承了源 mkv 的容器 start_time offset（典型 ~1.46s），audio 起点比 video 起点晚 22ms，hls.js demuxer 看到这种「audio 比 video 晚到」模式会 disable 整个 audio rendition",
+        "修法：lib/ffmpeg.js startHlsTranscode 加两个 flag：input 端 `-fflags +genpts` 让 ffmpeg 重新从 frame DTS 生成 PTS（不继承容器 start_time offset），output 端 `-avoid_negative_ts make_zero` 把任何残留负 DTS 钳到 0。两个一起保证 seg00000 audio 和 video 都从 PTS 0 起",
+        "实测复现：Bohemian.Rhapsody.2018 (DDP 7.1) + Invincible 无敌少侠 S01E01 (DDP 5.1) 在 v1.9.1 dplii 修复后浏览器仍静音。ffprobe seg00000 显示 video.start_time=1.483 / audio.start_time=1.461 / audio.duration 比 video 短 218ms — 典型 hls.js audio-rendition-disabled 触发模式",
+        "Why：用户 2026-05-11 反馈「硬刷没有声音，也识别不到可用切换音轨」。硬刷排除了浏览器 HTTP cache 嫌疑；音轨菜单空白排除了 audio decode 失败（HTMLMediaElement.audioTracks 为空 = hls.js 没把 audio rendition 挂上去）"
+      ]
+    },
+    {
+      "version": "Release1.9.1",
+      "date": "2026-05-11",
+      "changes": [
+        "Bug 修复：multi-channel EAC3 / AC3 源（DDP 5.1 / 7.1）经 HLS 转码后浏览器视频能播但完全没声音。Root cause：lib/ffmpeg.js startHlsTranscode 用的 `-c:a aac -ac 2` 默认 downmix 链对 channel_layout='7.1' / '5.1+2' 等部分 layout 走到 libavcodec 的 auto-downmix 矩阵零系数 fallback — cache 里 seg*.ts 实际有 192kbps AAC stereo 数据（ffprobe 验证 duration / bit_rate 都正常），但混音矩阵把前置声道压到接近 0",
+        "复现样本（2026-05-10 实测）：Bohemian.Rhapsody.2018.DDP.7.1.H.265-EDGE2020.mkv（EAC3 8 ch / channel_layout=7.1），Rick and Morty 第八季",
+        "修法：在 `-c:a aac` 与 `-ac 2` 之间显式插入 `-af aresample=matrix_encoding=dplii`。Dolby Pro Logic II 是 ITU-R BS.775-3 派生的标准 5.1/7.1 → stereo 矩阵，避开了 libavcodec auto-pick 的零矩阵分支。对原本就是 stereo / mono 的源 aresample 是 near-no-op pass-through，无需先 probe channel_layout 决定要不要加",
+        "Matrix 链顺序：`-af` 必须在 `-c:a aac` 之后但在 `-ac 2` 之前。`aresample` 接 demuxed planar samples，将 layout 重映射后再送给 AAC encoder。位置错了 filter 不生效",
+        "Why：用户原话「波西米亚狂想曲的7.1音频通道无法播放，先修这个」+「同时发现瑞克与莫蒂第八季也有这个问题」。两个独立文件复现 = 不是单文件特殊，是 server 转码命令本身的链路 bug",
+        "已知限制：Ghost.in.the.Shell.1995.HDTV.HEVC.EAC3 这种异常源（帧率 500/21、分辨率 1920×1038、HDTV deinterlacing 痕迹）不在适配范围。README 加适配限制说明",
+        "Cache 清理：旧 cache 用旧静音命令转的 seg*.ts 必须删掉重转。本次部署清 Bohemian (key=796e07e0192f9f4e45e6e06a86d5831362faabb2) + Rick and Morty 集合（cache key 待补）",
+        "前端 startHlsAndWait 适配新 status: 'transcoding' / 'queued' 仍然推后到下一个 PR — 本次只动 server-side audio chain"
+      ]
+    },
+    {
+      "version": "Release1.9.0",
+      "date": "2026-05-10",
+      "changes": [
+        "调度逻辑彻底重写：HLS 转码不再边播边转。/hls-start 只有两个出口 — cache 命中 ENDLIST → 直接播；否则一律拒绝播放，自动入队。Why：用户原话「用户在使用时停止全部转码行为，如果一个视频没有转码完成那就不让用户播；等没人看的时候再全力在后台转码」",
+        "新功能：lib/system-load.js — 每 5s 采样 /proc/stat 算系统 idle%。Linux 用 idle+iowait / total deltas，Windows 走 os.cpus() fallback。Boot baseline 默认 100% idle 避免冷启时误判忙",
+        "新功能：server.js 全局 accessTracker — loadSession 后挂 middleware，认证请求一律刷 lastApiHitAt。isAnyoneAccessing() = (now - lastApiHitAt) < 5min。任何登录用户 5 分钟内有 API 触动都视为「在用」",
+        "新功能：三档自适应调度器 (server.js tickHlsQueue) — pickTier() 三态：(1) 无访问 → 'full' 启 -threads 3 nice 0 ≈ 80% CPU (2) 有访问 + idle > 60% → 'throttle' 启 -threads 2 nice 0 ≈ 50% CPU (3) 有访问 + idle ≤ 60% → 'paused' SIGSTOP 跑着的 ffmpeg。每 5s tick 一次，状态切换平滑。Job 参数 spawn 时定死，运行中不重启 — 避免 HLS event playlist 中断丢进度",
+        "新功能：pauseJob/resumeJob 用 process.kill(-pgid, 'SIGSTOP'/'SIGCONT')。Targets the process group 让 libx264 worker threads 一起冻结/解冻。SIGSTOP 不可被 ffmpeg 拦截，最干净的让出方式。Windows 没 SIGSTOP-equivalent，dev box 上 no-op",
+        "新功能：lib/ffmpeg.js startHlsTranscode 加 opts.threads 参数（默认 2，scheduler 按档位传 2 或 3，clamped to [1,4]）。原有 niceLevel 参数保留，新版 default 行为是 nice 0",
+        "新功能：/api/hls-queue 增 scheduler 字段：{tier, idlePct, idleThreshold, accessing, accessAgeSec, accessTtlSec}。Admin 面板可观测当前档位选择依据。每个 active job 加 segments / paused / tier 字段",
+        "调整：/api/episode/:id/hls-start 响应 shape 变化。新增 status: 'transcoding' (in-flight, 含 paused/tier/segments) 和 status: 'queued' (含 position/queueSize)。client 看到这两态都不应播放，应轮询等 'ready'",
+        "移除：HLS_MAX_ACTIVE / HLS_HEARTBEAT_TTL / HLS_SCAN_INTERVAL / demoteJob / lastBeat / demoted 字段。1.8 的 nice 10 → 19 单向 demote 模型不再需要，新调度器用 SIGSTOP/SIGCONT 双向控制",
+        "移除：waitForFile 函数。on-demand 转码路径不存在了，没人需要等 first segment 出现",
+        "兼容：/api/hls-heartbeat 端点保留，前端 startHlsHeartbeat 不需改。但其 1.8.x 的 anti-demote 作用废止，现在只回报 paused/tier 状态供 UI 显示「转码已暂停」",
+        "Why 选 5 分钟 ACCESS_TTL：太短 (30s) 用户翻页停顿就开转；太长 (30min) 关电脑半小时仍卡着。5 分钟刚好覆盖一般阅读节奏不误触，关浏览器后窗口很快开放",
+        "Why 选 60% idle 阈值：DS124 四核 ARM A55，~40% busy 意味着大约 1.6 核被占；此时再叠 -threads 2 ffmpeg (50%) 整机过 90%，node + nginx 又开始抢不到 CPU。60% 是经验拐点 — 留出 40% headroom 给 user traffic"
+      ]
+    },
+    {
+      "version": "Release1.8.0",
+      "date": "2026-05-10",
+      "changes": [
+        "事故修复 + 新功能：1080p HEVC HLS 转码把 DS124 的四核 ARM A55 打满 9 分钟+，load average 一度 11.94，node event loop 被饿死，express 不再 accept 新连接，nginx 反代 :80 全部 502/timeout。Root cause：startHlsTranscode 默认 nice 0 + 不限 threads，libx264 veryfast 默认按 ncores * 1.5 起 6 个 worker 把 4 核全吃；node 与 ffmpeg 同优先级竞争，CFS 把 ffmpeg 的 IO 等待时间分给同优先级的 ffmpeg 而不是 node",
+        "新功能：HLS 后台预转码队列。集合粒度，admin 在任意页面右下 floating「预转 mkv」按钮一键扫描某集合所有 .mkv，HEVC / 非 H264 视频自动入队 (H264+AAC 跳过)。worker 每 10s 弹一个 nice 19 + threads 2 + ultrafast 串行后台跑，不与 user transcode 抢 CPU (有 user transcode 时队列暂停)。队列持久化到 data/hls-queue.json 跨重启不丢。完成的写 ENDLIST 进缓存，下次访问秒开。Why：用户原话「在无人使用时使用3核后台全力转码并储存在nas，确保我今天导入这个mkv虽然看不了，但是明天上线能完整看」",
+        "新功能：startHlsTranscode stdio 全 ignore + detached:true，让 ffmpeg 真正脱离 node 进程。node 重启 / 部署 / DSM 升级时,正在跑的 ffmpeg 不会被 SIGPIPE / SIGHUP 带死,继续跑到 ENDLIST。代价：丢失 stderr errTail debug 日志 (从 disk segment + ENDLIST 状态可恢复推断)",
+        "调整：HLS preset veryfast → ultrafast，threads 1 → 2，niceLevel 参数化 (默认 10 / 队列任务 19)。1080p HEVC 实测速度从 0.06x (旧 veryfast/1/19) 提到 0.5x (新 ultrafast/2/10) 实时，约 9x 提升。仍跟不上播放但缓存累积速度跟得上夜间预转",
+        "新功能：POST /api/collection/:id/pretranscode-mkv (扫集合 mkv → 入队) + GET /api/hls-queue (snapshot for admin UI)",
+        "新功能：lib/ffmpeg.js startHlsTranscode 在 POSIX 上包 `nice -n 10 ffmpeg -threads 1 ...` + spawn detached:true（PGID = child.pid，便于后续 renice 整组）。Windows dev 路径不变。CFS 权重表 nice 10 对 nice 0 ≈ 110/1024，node 在与 ffmpeg 竞争时拿 90% CPU，ffmpeg 拿剩下 10% — 实测足够首段 5-10s 出来",
+        "新功能：server.js HLS 调度引入心跳 + 全局闸 + 单向降级。hlsJobs 项加 {pid, lastBeat, demoted, epFile}，常量 HLS_MAX_ACTIVE=2 / HLS_HEARTBEAT_TTL=45000 / HLS_SCAN_INTERVAL=15000。setInterval 每 15s 扫描，>45s 无心跳的 job 调 `renice -n 19 -g <pgid>` 单向降级（RLIMIT_NICE=0 验证过普通用户不可逆，所以 promote 不实现）。/hls-start 在 active count >= 2 时返 503 + Retry-After=5 + status:queued",
+        "新功能：POST /api/hls-heartbeat?key=<key> 接口。前端 startHlsAndWait 拿到 key 后启动 setInterval(20s) POST 心跳，disposeHls / 切音轨自动清理或替换。queued 时 toast 提示 + 5s 退避自动重试，60s 总上限。response status:gone 表示 ffmpeg 已 ENDLIST 完成，前端停止心跳",
+        "Bug 修复：主菜单底部 'CHIRAL NETWORK CHANNEL · v1.2' 硬编码版本号。改用 server 端 __VERSION__ 占位符注入（peer of __BUILD__ 但不 url-encode），现在显示当前 release 号",
+        "Why：用户原话「部署到媒体库服务无法访问了」/ 「保留转码，但是优先保证系统可用，当用户不再观看该文件时降低其占用和优先级」。事故触发点是用户拉了 Ghost.in.the.Shell.1995（HEVC Main 10）— 1.7.48 的 HLS 重编码功能本身没问题，问题是没限资源。本次只改 ffmpeg 调度策略，转码逻辑 / 缓存命名 / playlist 类型 全部保留"
+      ]
+    },
+    {
+      "version": "Release1.7.48",
+      "date": "2026-05-10",
+      "changes": [
+        "重大 bug 修复：Ghost.in.the.Shell.1995（HEVC Main 10 + 5 路 EAC3/FLAC/AC3 音轨的 mkv）此前完全无法播放。Root cause 1：HLS pipeline 始终 `-c:v copy`，HEVC TS 段直接落到 hls.js → 浏览器没能力 demux + decode。Root cause 2：HLS pipeline 写死 `-map 0:a:0?` 只放第一路音轨，5 路日 / 英 / 评论无从切换",
+        "新功能：HLS 管线接受 audioStreamIndex / videoCopy 选项 — 服务端探到非 H264 视频自动 libx264 veryfast / crf 23 / yuv420p 重编码（HEVC Main 10 实际生效），探到 ?a=&lt;abs_idx&gt; 用 `-map 0:&lt;idx&gt;`。缓存 key 改为 sha1(cid|file|aTag) 让不同音轨独立缓存，切回某语言走静态命中",
+        "新功能：/api/episode/:id/codecs 返回新 audioTracks: [{streamIndex, codec, language, title, channels, default}]，前端 startHlsAndWait 后追拉 codecs 拿全量音轨元数据 → state.serverAudioTracks。设置面板里「音轨」子菜单 HLS 模式从该数组渲染（label 优先 title → language+codec+channels → fallback），点击调 switchHlsAudio：保存 currentTime → 新 ?a= 重起 HLS → attachHls → canplay 后恢复时间轴 + 速度 + 自动 play",
+        "新功能：hls-start 加 audio idx 校验，?a= 不在 ffprobe 列表内 400 直拒；切到非默认音轨即使 codecs 全 browser-safe 也走 HLS（否则没办法上线非首音轨）",
+        "调整：HLS first-segment 等待上限 30s → 60s。HEVC libx264 veryfast 在 ARM A55 上跟不上实时，前几段延后；30s 阈值会误 504",
+        "Why：用户原话「media更新了一批新的画廊，其中检查攻壳机动队1995的内容无法播放，无法选择音轨」。Ghost 文件流是 HEVC 10-bit 1920x1038 + 5 路（jpn EAC3 5.1 / jpn FLAC stereo / eng EAC3 5.1 / eng FLAC stereo / eng AC3 评论），浏览器一项也接不住"
+      ]
+    },
+    {
+      "version": "Release1.7.47",
+      "date": "2026-05-10",
+      "changes": [
+        "重大 bug 修复：手机 LAN 访问 ICMP 通但 TCP 超时。Root cause 是 Windows 防火墙里有遗留的 'Node.js JavaScript Runtime' 入站 Block 规则（每次过去几年装过的 Node 项目首次入站时 Windows 弹「允许 / 取消」用户点过「取消」就生成一条），多个项目积累 8 条同名 Block 规则，Block 优先级高于 Allow，新加的端口 Allow 规则被压住。本次现场 user 测试机有 8 条 Block 规则全部 Profile=Public，正好对应他 Wi-Fi 被 Windows 标 Public 的情况",
+        "新功能：lib/firewall-rule.ps1 重写为一站式 firewall 管理脚本。Action=Add 现在做三件事：(1) 找所有 enabled inbound Block-Inbound-node.exe 规则，把它们 Name + DisplayName + Profile 写入 lib/firewall-state.json，然后 Disable-NetFirewallRule（不删除，可逆）。(2) 加 'Chiral Network Channel <port>' 入站 TCP Allow Profile=Any 规则。(3) elevated context 自己回查 Get-NetFirewallRule 写 VERIFY OK 行到 log。Action=Remove 反向：删 Allow 规则 + 读 state file 精准 Enable-NetFirewallRule + 删 state file。state file 缺失时 fallback 是「enable 所有 disabled 的 node.exe Block-Inbound 规则」",
+        "新功能：bat 启动时显示 EXPERIMENTAL 警告 + README 文件路径。提醒用户 Windows 当 server 是实验性方案，按 [A] 之前先看 README §B 和 §B.7。Why：用户原话「在Readme和脚本里给使用windows作为服务器的选项加入说明，表明该方案为实验性部署方式，可能造成的危害和问题，readme里面加免责声明，在脚本运行时提醒用户去看readme」",
+        "新功能：bat 加 Security notice block，明列 [A] 操作的 4 条副作用：(1) 谁能连 + 密码明文 (2) Profile=Any 在公共 Wi-Fi 也开 (3) Block 禁用全局影响所有 node.exe (4) 第三方 AV 多设一层。所有点都是知情同意而不是 surprise",
+        "文档：README.zh.md / README.en.md 大改版。§B 头部加 EXPERIMENTAL 警告 + Method-B 专属风险表（B-1 到 B-6）+ 完整免责声明引用。§B.3 重写为「5 步一站式流程」。§B.3.1 解释 [A]/[R] 实际做什么。§B.3.2 安全 / 风险知情同意条款。§B.3.3 启动器示例输出。§B.3.4 LAN HTTP 限制。新加 §B.7 排错章节 9 个子节：B.7.1 ICMP 通 TCP 不通（Block 规则覆盖 Allow）/ B.7.2 [A] 后窗口闪退 / B.7.3 没看见 UAC 弹窗 / B.7.4 第三方安全软件（火绒 6.x / 火绒 5.x / 360 / Norton / Comodo 各自路径）/ B.7.5 VPN 隧道 IP 被错列 / B.7.6 路由器 AP 隔离 / B.7.7 双 Wi-Fi 适配器 / B.7.8 端口被占 / B.7.9 出门连不可信 Wi-Fi 之前 [R]。Why：用户原话「在Readme里面加上我们已经遇到的问题和解决方案，补上其他常见问题和解决方案」",
+        "清理：删除 lib/diagnose-firewall.ps1（功能并入 firewall-rule.ps1 的 elevated VERIFY 段）+ 删除 lib/cleanup-node-block-rules.ps1（功能并入 firewall-rule.ps1 的 Add 路径）。lib/ 下 firewall 相关只剩 firewall-rule.ps1 一个",
+        "清理：bat 删掉非 admin verification 段（Get-NetFirewallRule 在非 admin token 下有时看不见 admin 加的规则，产生误导性 MISSING）。改为完全依赖 elevated child 写到 firewall-rule.log 的 VERIFY OK 行作为权威结果",
+        "Why：用户连发四条「好了终于连上了，更新readme和脚本，尽可能做到一站式就能让用户从手机访问，在启动前补全安全和危害说明」「在Readme里面加上我们已经遇到的问题和解决方案，补上其他常见问题和解决方案」「在Readme和脚本里给使用windows作为服务器的选项加入说明，表明该方案为实验性部署方式」。本版把 [A] 从「加规则」升级为「清理 + 加规则 + 验证」单步完成"
+      ]
+    },
+    {
+      "version": "Release1.7.46",
+      "date": "2026-05-10",
+      "changes": [
+        "整合：删除 enable-lan-access.bat / disable-lan-access.bat 两个独立脚本，全部并入 ChiralNetworkChannel.bat 启动后的交互菜单。1.7.45 拆三个 bat 实际给用户增加心理负担：分不清「平时双击哪个」「什么时候开 / 什么时候关」「关掉后还能再开吗」。整合为一个 launcher 后流程线性：服务起来 → 看 LAN URL → 选 [A]llow / [R]emove / [N]o change firewall → 选 [Y/N] open browser → 关窗口（服务在后台继续）",
+        "新功能：ChiralNetworkChannel.bat 自动开浏览器改为可选。1.7.44 起 bat 在 server ready 后立刻 `start \"\" %LOCAL_URL%`，1.7.46 改为 prompt `Open the player in your default browser now? [Y/N]`。N 直接关窗口保留服务在后台跑，便于纯当 LAN 服务器只给手机用的场景",
+        "新功能：ChiralNetworkChannel.bat firewall 改规则也走 prompt（[A/R/N] 三选一）。原 1.7.45 是双击外部 bat 后立即弹 UAC、用户没机会反悔；现在 launcher 启动后用户可以选 [N] 完全不动 firewall，[A] 才弹 UAC 加规则，[R] 弹 UAC 删规则。Why：用户原话「改防火墙规则这个也应该要给用户选择，这个涉及到安全性问题」",
+        "修复：firewall add 的 -Profile 从 `Private,Domain` 改为 `Any`。1.7.45 现场症状是用户加了规则但手机仍连不上 LAN，root cause 大概率是 Windows 把当前 Wi-Fi 标记为 Public（家用 Wi-Fi 首次连接默认 Public），Private,Domain 规则在 Public 网络上根本不匹配。改 Any 覆盖所有 profile，trade-off 是规则在 Public Wi-Fi 上也生效，需要用户在不可信网络下主动 [R] 移除（README 已加警告）",
+        "新功能：LAN URL 列表过滤虚拟 / VPN 接口。1.7.44 用 Get-NetIPAddress 把所有非 127/169 的 IPv4 全列出，包括 WireGuard / OpenVPN / TAP / Hyper-V / WSL / vEthernet / Bluetooth PAN，用户看到 10.7.0.2（WireGuard 隧道）以为是 LAN IP 在手机上贴一直连不上。改成 InterfaceAlias regex 排除 (?i)(VPN|Tunnel|WireGuard|OpenVPN|TAP|Hyper-V|WSL|vEthernet|Loopback|Bluetooth|Pseudo|Teredo|isatap)，并在每行 URL 后追加 `[InterfaceAlias]` 标签让多物理网卡场景下用户能选对地址。Why：用户原话「http://10.7.0.2:8080/这个我在电脑上和局域网设备上都打不开」",
+        "新功能：bat 边界控制 + 每步反馈。choice 之前没有不合法输入处理（虽然 choice /c 本身会拒绝非指定字符 + 蜂鸣，但在 redirected stdin / 无 console 场景会返回 255 直接 fall through）。每个 prompt 加 :firewall_prompt / :browser_prompt label，invalid 路径 echo 'Unrecognised input' 后回 prompt。每个分支末尾加 [Done]/[Skipped] 反馈 + `pause >nul` 让用户阅读后再进下一步。最末尾再加一次 final pause。Why：用户原话「边界控制没有做好，如果用户输入了其他字符需要给出对应的报错，只有在用户选择了正确的退出路径后窗口才关闭，选择选项时也应该选择后给出反馈然后等待用户键入再关闭」",
+        "修复：选 [A] 直接关窗口的 bug。原 bat 用嵌套 powershell `Start-Process -Verb RunAs -ArgumentList @('-NoProfile',...,'-Command',\\\"Get-NetFirewallRule | Remove-NetFirewallRule; New-NetFirewallRule | Out-Null\\\")` 一行搞定，但 cmd 解析时遇到 `\\\"` 会把外层 quote 提前结束，里面的 `|` 变成 cmd 级 pipe，整行被拆成 3 段坏 pipeline；side effect 之一是 launcher 窗口在用户面前消失。修法：抽出 lib/firewall-rule.ps1 helper（param Action/Port，单文件 add/remove 逻辑），bat 只跑 `powershell -Command \\\"Start-Process powershell -Verb RunAs -ArgumentList '...','-File','...firewall-rule.ps1',... -Wait\\\"` 一层 quote，cmd 不再误解析。`-Wait` 让 bat 等 elevated 子进程结束再继续，verification 立刻能查到正确状态",
+        "修复：choice 替换为 set /p。原 bat 用 `choice /c ARN /n` + `if errorlevel N` 选项，user 反馈每个键入都关窗口。最终 root cause 跟 choice 无关（是上面那条嵌套 PS quoting）但 set /p 行为更可预测 — 即便 stdin 失败也是空输入循环而不是直接 fall-through 到 endlocal exit，failure 模式 LOUD 而非 silent。代价是 user 要敲 letter + Enter 而不是单键，可接受",
+        "Why：用户连发三条「整合脚本，去掉控制台输出部分中的中文内容」「我设备还是进不去」「把自动打开网站这个功能改成可选项」「改防火墙规则这个也应该要给用户选择，这个涉及到安全性问题」「边界控制没有做好…」。本版把 LAN-access UX 重写为一个完全 opt-in 的线性向导，加上每步反馈 + 不合法输入回退"
+      ]
+    },
+    {
+      "version": "Release1.7.45",
+      "date": "2026-05-10",
+      "changes": [
+        "新功能：enable-lan-access.bat / disable-lan-access.bat 一键脚本。1.7.44 README 让用户「找到 Node.js JavaScript Runtime 规则改成允许」用户实际操作时防火墙规则列表里十几条同名 Node.js 入站规则（每装一个用 node 的程序就多一条），用户分不出该改哪条。换路径：用脚本添加针对 TCP 8080 端口的规则（不绑特定 node.exe binary），避开同名规则列表问题。脚本通过 powershell Start-Process -Verb RunAs 自 UAC 提权，用户双击 → 同意 UAC → 完成",
+        "实现：enable-lan-access.bat 检测 net session 是否是管理员，不是就 self-relaunch via PowerShell -Verb RunAs；读 .server.port 拿当前端口（fallback 8080）；先 Remove-NetFirewallRule 删旧名字相同规则（幂等），再 New-NetFirewallRule -DisplayName 'Chiral Network Channel <port>' -LocalPort <port> -Profile Private,Domain。disable-lan-access.bat 反向操作",
+        "文档：README.zh.md / README.en.md §B.3 防火墙步骤改为推荐用脚本（删 GUI 路径「找 Node.js Runtime 改允许」），保留 PowerShell New-NetFirewallRule 命令作高级用户 fallback",
+        "Why：用户原话「讲解不清晰，我 nodejs 有这么多我怎么知道用那个」+ 截图显示 17 条同名规则"
+      ]
+    },
+    {
+      "version": "Release1.7.44",
+      "date": "2026-05-10",
+      "changes": [
+        "新功能：ChiralNetworkChannel.bat 启动后不再立即退出，新增本机 + LAN URL 显示 + 防火墙提示。原来是 wscript 启动 hidden node 后 bat 立刻 exit，用户没办法看到「同 Wi-Fi 内手机要连哪个地址」。改成在 :open block 末尾用 powershell `Get-NetIPAddress -AddressFamily IPv4` 列出所有非 loopback / 非 link-local IPv4 地址 + ACTIVE_PORT，每行 echo 一条 `http://<ip>:<port>/`，最后 pause 等用户按键关闭。关闭仅退出 cmd 窗口，不影响 hidden node 进程",
+        "实现：powershell 内联 `Get-NetIPAddress | Where-Object IPAddress != 127.0.0.1 -and -notlike 169.254.* | ForEach-Object Write-Host`，端口通过 env var DS124_PORT 传入避开 batch !var! 在 powershell 引号内的 quoting 雷区",
+        "文档：README.zh.md / README.en.md 加 §B.3「让局域网内的手机/平板访问」章节，覆盖启动后 cmd 窗口示例、Wi-Fi 同网段提示、防火墙允许步骤（GUI + PowerShell 两条路径）、LAN HTTP secure-context 限制清单（SW / 重力翻转 / DocPiP 三个降级 API）。原 §B.3-B.5 顺延为 §B.4-B.6",
+        "Why：用户原话「适配基于Windows系统来当服务器的模式，更新文档提供部署步骤，更新服务启动脚本，让其在启动后先不自动关闭窗口而是显示局域网IP地址，用户手动确认后关闭窗口」。代码层 server 早已 HOST=0.0.0.0 LAN-ready，本期是文档 + 启动 UX 补强"
+      ]
+    },
+    {
+      "version": "Release1.7.43",
+      "date": "2026-05-10",
+      "changes": [
+        "重构（替换方案）：1.7.42 的「重力翻转」自动监听 deviceorientation 事件在 DS124 LAN HTTP 部署上 100% 不工作 — Chrome/Safari 自 ~2020 起 gate DeviceOrientationEvent / DeviceMotionEvent 在 secure context 后面，HTTP 192.168.10.175 不是 secure context（只 localhost / HTTPS 是），传感器事件根本不发到 listener。NAS 上 HTTPS 改造涉及 nginx + 证书，超出本次范围。",
+        "替换：删 settings menu「重力翻转 ▶ 开/关」item + state.gravityFlip + LS key + deviceorientation listener 等约 80 行。改成 Plyr 控制栏 inject「翻转屏幕」按钮（plyr__control--custom，圆形旋转箭头 SVG，全屏按钮旁），点击切换 lockedSide primary/secondary 并 screen.orientation.lock 到反向。手动按钮在任何 origin 都可用（不需要 sensor 权限），用户翻手机 + 点按钮 = 即时翻转",
+        "保留：进 fullscreen 自动 lock landscape-primary（永久启用，无开关）。state.flipSide 跟踪当前 lock 方向给翻转按钮算反向用",
+        "iOS：screen.orientation.lock 不支持 → 翻转按钮 click no-op，但 iOS native 全屏的 OS 自动转屏行为不变，体验等价",
+        "Why：用户原话「翻转开关启动后功能不可用」"
+      ]
+    },
+    {
+      "version": "Release1.7.42",
+      "date": "2026-05-10",
+      "changes": [
+        "重构：1.7.41 的「自动横屏 开/关」开关用户反馈「重力翻转那边不可用」（screen.orientation.lock('landscape') 锁后不允许 ±180° 内动态切，所以「关」语义没法做到「跟随重力」。auto-landscape 改为永久启用（不再 toggle，进 fullscreen 始终 lock landscape-primary），新单一开关「重力翻转」语义清晰：开 = 翻 180° 画面跟随，关 = 始终初始方向",
+        "实现：state.autoRotate → state.gravityFlip（默认 OFF，多数用户不希望抖动旋转），LS key 改为 ds124:gravityFlip。lock 之后挂 deviceorientation listener 监听 event.gamma：> 30° = 设备 secondary side、< -30° = primary side、中间 30° 死区避免抖动。检测到 side 变化 → 重新 lock('landscape-secondary' or 'landscape-primary')。退出 fullscreen 自动 detach listener + unlock",
+        "Live toggle：菜单切换时若已在 fullscreen，立即 attach/detach listener 不要求用户出/进全屏。lockedSide tracker 防 lock() 抖动调用",
+        "iOS 兼容：iOS 13+ 需要 DeviceMotionEvent.requestPermission() 才给 deviceorientation。我们不强求弹权限框，未授权设备 listener 静默无 event = 等同 gravityFlip OFF（事件永不到达 → lockedSide 永远 'primary' → 不切方向）",
+        "Why：用户原话「自动横屏没问题，但是跟随重力180°翻转这个功能的开关不可用，不需要控制是否启用自动横屏，仅控制是否翻转」"
+      ]
+    },
+    {
+      "version": "Release1.7.41",
+      "date": "2026-05-10",
+      "changes": [
+        "新功能：Plyr 设置菜单加「自动横屏 ▶ 开/关」item — 进全屏时自动 screen.orientation.lock('landscape') 把手机锁横屏。关 → 不 lock，让设备方向（重力感应）主导。state.autoRotate 默认 ON 持久化到 ds124:autoRotate LS",
+        "实现：peer of 速度/字幕/画质/音轨 的 sub-panel，两个 radio（开/关）+ back btn；plyr enterfullscreen / exitfullscreen 事件分别 lock/unlock。screen.orientation.lock 在 iOS Safari 不支持（API 缺失），iOS 用户依赖 OS native 全屏自动转屏，功能 fallback 良好",
+        "重力翻转：开关「关」时不调 lock，浏览器默认让 OS 控制屏幕方向 — 用户翻 180° 屏幕跟随，符合「重力感应翻转」诉求。「开」模式下 lock landscape-primary 后 180° 翻转无效（API 限制：lock('landscape') 锁定一个方向，不允许两 landscape 之间动态）",
+        "Why：用户原话「移动端适配：视频播放器需要能够进入全屏模式时自动横屏，最好还能支持重力感应翻转，加一个开关控制这个功能」"
+      ]
+    },
+    {
+      "version": "Release1.7.40",
+      "date": "2026-05-10",
+      "changes": [
+        "重构（替换方案）：1.7.39 mp4 audio-remux 路径整套移除 — ffmpeg `.mp4.part` 临时文件名 ffmpeg 8.1 拒收报「Error opening output file ... Invalid argument」（扩展名识别失败，要求 -f mp4 显式指定，但即便如此用户体验仍是「等 1-3 分钟才能开播」，不可接受）。彻底换 HLS（HTTP Live Streaming）实时切片：ffmpeg 输出 6 秒 .ts segment + event playlist，第一段 5-10 秒就 ready，hls.js (vendor/hls/hls.min.js, ~110KB gz, lazy-load) 接管 video MSE，用户立即开播 + 任意 seek + 后台 segment 持续生成",
+        "实现（server）：删 audioRemuxJobs / audioRemuxCachePath / /api/episode/:id/audio-remux endpoint / /audio-remux-cache static handler。新增 /api/episode/:id/hls-start endpoint（probe codec + 启动 ffmpeg HLS 任务 + 等首段 disk 写入），/hls-cache static handler 服务 .m3u8（no-cache，需重 fetch）+ .ts（一年缓存）。ffmpeg 命令 `-c:v copy -c:a aac 192k 2 -hls_time 6 -hls_playlist_type event -hls_flags temp_file`",
+        "实现（client）：删 waitForAudioRemux + 旧 audio-remux poll 逻辑。新增 loadHlsJs() lazy-load + attachHls(playlistUrl) + disposeHls()。showPlayer 内 audio gate 改为 startHlsAndWait → attachHls → MANIFEST_PARSED 就绪开播。HLS 路径不调 plyr.source（hls.js 用 MSE 接管 video.src，不能被 plyr 覆盖）；plyr 仍可控制 play/pause/seek/speed",
+        "清理：episode-end 和切剧集 cleanup 加 disposeHls() 释放 MSE buffer；index.html 的 player-loading-overlay 文案改为「前几秒就绪后立即开播」",
+        "保留：1.7.37 ffmpeg.js mixedArgs（per-stream copy/encode，仍服务非 native ext 的 /media-stream 路径）；/api/episode/:id/codecs endpoint（HLS gate 内部仍用，复用同样 probe 逻辑）；libpgs PGS 渲染、内嵌字幕 extract、字幕 settings 菜单等之前 1.7.20-1.7.34 的工作全部不动",
+        "Why：用户原话「转码失败，直接上替换方案，清除现有方案的冗余代码」"
+      ]
+    },
+    {
+      "version": "Release1.7.39",
+      "date": "2026-05-10",
+      "changes": [
+        "新功能：音频不兼容 mkv 自动后台 remux + 缓存 — 进 player 时 client probe audio codec，不在 SAFE 集合（aac/mp3/opus/vorbis/flac）就触发 server-side ffmpeg 任务：copy H264 video 不动 + 转码 EAC3/DTS/TrueHD/MLP → AAC，封装为 +faststart mp4 缓存到 data/audio-remux-cache/<sha1>.mp4。期间 player 显示加载 overlay（spinner + 进度 % + 提示文案）。完成后 client 设 source 到缓存 mp4，byte-range 静态服务，整集加载、可任意 seek、A/V 同步、有声音。第二次访问同 ep 立即命中缓存（无需等待）",
+        "实现：lib/ffmpeg.js 加 audioRemux(input, output, onProgress)（`-c:v copy -c:a aac -b:a 192k -ac 2 -movflags +faststart -progress pipe:1`），原子 .part → rename 写盘；server 加 /api/episode/:id/audio-remux endpoint（cache 命中即返、in-flight job 共享、未命中触发新 job + 立即返 pending），新 /audio-remux-cache static handler 支持 byte-range",
+        "UI：HTML 加 #player-loading-overlay（覆盖在 video 上）+ CSS spinner 动画 + 进度 % + 提示文案「首次播放需要转换音频，约 1-3 分钟，下次秒进同集」。app.js 加 showPlayerLoading / updatePlayerLoading / hidePlayerLoading / waitForAudioRemux helpers，poll 每 2 秒更新进度",
+        "Why：用户连环 — 「S01加载还是一段一段」+ 「先看默剧再有声音那能对咯」+ 「允许集成第三方」。先做自制阻塞方案；hls.js 实时切片方案预留下一步（如果用户嫌 1-3 分钟等待不可接受）。已知限制：用户允许集成第三方，HLS 方案可达到「立即播 + 可 seek」，但需引入 hls.js (~100KB gz) + server HLS 切片输出。当前自制方案首次等待但每集只等一次"
+      ]
+    },
+    {
+      "version": "Release1.7.38",
+      "date": "2026-05-10",
+      "changes": [
+        "撤销：1.7.35 的 audio-codec gate 强制 mkv 走 /media-stream 在用户场景下得不偿失 — 解决 S01 EAC3 静音的代价是「一段一段加载」(fragmented MP4 streaming) + A/V 同步漂移问题。用户原话「先把整集加载和基础功能恢复了」明确选择牺牲 EAC3 音频还原也要保留 byte-range native serve。streaming 改回 const = needsTranscode(ep.ext)，跟 1.7.21-1.7.34 一致；client 进 player 不再 fetch /api/episode/.../codecs。S01 不支持的 audio codec 用户 PC 端 mkvtoolnix 自行 remux 到 AAC",
+        "保留：lib/ffmpeg.js 的 mixedArgs (1.7.37) per-stream copy/encode 决策仍然在用 — 其他非 native ext (.avi/.wmv/.flv 等) 走 transcode 时也受益；server 端 /api/episode/:id/codecs endpoint 也保留（codec 探测无害且未来可能用），仅 client 不再调",
+        "Why：用户原话「S01加载还是一段一段的，不像mp4是一整个；目前还有音画不同步，先把整集加载和基础功能恢复了」"
+      ]
+    },
+    {
+      "version": "Release1.7.37",
+      "date": "2026-05-10",
+      "changes": [
+        "修复（致命）：S01 mkv transcode 模式下音轨/字幕/画面全部不轴对齐 — root cause 是 streamTo 用 all-or-nothing 决策：检测到 EAC3 audio 不在 REMUXABLE_AUDIO_CODECS → useRemux=false → 整个走 encodeArgs，连 H264 video 也重编码 libx264。video 重编码独立 timestamp rebase + audio 独立编码，A/V 没有共同基准 → 长视频累积 drift。改为 per-stream copy/encode：probe 后分别看 video 和 audio 是否 browser-safe，video=H264 直接 -c:v copy 不动 timestamp，audio=EAC3 才 -c:a aac 转码。S01 走 audio-encode 模式（video copy + audio aac），timing 锁定 video 的原始 PTS",
+        "改良：streamTo 的 X-Transcode-Mode 响应头细化为 remux / audio-encode / video-encode / encode 四态（之前只有 remux/encode 二选一），方便诊断不对齐 / 慢速等问题",
+        "清理：删 lib/ffmpeg.js 的 remuxArgs + encodeArgs 函数（只用了一次的内部 helper），合并为一个 mixedArgs(filePath, startSec, videoCopy, audioCopy)",
+        "Why：用户原话「S01现在音轨字幕画面没一个是轴对齐的」"
+      ]
+    },
+    {
+      "version": "Release1.7.36",
+      "date": "2026-05-10",
+      "changes": [
+        "修复（致命）：1.7.35 的 audio-codec gate 设了 streaming=true 但 videoSrcFor() 内部仍按 ext 决定 URL（.mkv 在 native 白名单 → 返回 /media 静态 URL），所以 EAC3 mkv 的实际 URL 还是 native serve，浏览器拿到 EAC3 仍静音。给 videoSrcFor 加 forceStream 参数，showPlayer + seeking handler 都传 state.currentIsStream — 现在 EAC3 mkv 真的走 /media-stream（ffmpeg 转码 EAC3 → AAC，浏览器有声）。代价是不可 byte-range seek（fragmented MP4 的固有限制），seek 通过 ?t=<sec> 重启 ffmpeg 实现，client 拖进度条会感知到 buffer 重启",
+        "修复：移动端字幕列表显示不全 — 1.7.34 的 `:has(.plyr--menu-open)` CSS rule 在某些浏览器（DS124 自带 / 旧版 Chromium / iOS 老 Safari）实现不完整，#player-container 仍 clip 字幕 popup。新增 MutationObserver 监听 plyr container 的 class 变化，同步 toggle 一个 plain `.ds-menu-open` class on #player-container，CSS rule 同时认这两个 class — :has 工作就 :has，:has 不工作就 fallback class",
+        "改良：#plyr-settings-captions-custom 加 touch-action: pan-y + -webkit-overflow-scrolling: touch，移动端 touch 滚动响应更稳",
+        "已知 trade-off：S01 EAC3 mkv 现在能播音频但走 transcode → 不可 byte-range seek（用户原话「快进就重开」是 fragmented MP4 streaming 的固有行为）。物理上不可调和：要 native byte-range seek 需要 audio codec 浏览器原生支持；EAC3 浏览器原生不支持只能转码；转码出 fragmented MP4 即不可 byte-range。彻底解需要 PC 端预 remux 把 EAC3 → AAC 重打包成新 mkv（mkvtoolnix-gui 几分钟）；后续若用户接受可以做 server 端预转码缓存，但 DS124 ARM A55 跑 1080p H264 复制 + audio AAC 编码慢且占盘",
+        "Why：用户原话「S01的文件又变成没法快进的那种了，一调进度就重开；依旧没有声音；依旧看不全列表」"
+      ]
+    },
+    {
+      "version": "Release1.7.35",
+      "date": "2026-05-10",
+      "changes": [
+        "修复（致命）：S1 mkv 静音 — Invincible.S01 用 EAC3（Dolby Digital Plus）5.1 音频，Chrome / Firefox 都不原生支持。1.7.21 把 mkv 加 native 白名单后，浏览器拿到 EAC3 音轨无法解码，video H264 仍正常 → 视频能播但完全静音，且 video.error code=4 不触发（视频帧仍正常 push）。新增 server 端 ffprobe endpoint /api/episode/:id/codecs?file=<encoded> 探测 audio codec 列表，client 进 player 时 await 该 fetch，audio codec 不在 SAFE 集合（aac/mp3/opus/vorbis/flac）就强制走 /media-stream 让 ffmpeg 转码到 AAC。AC3 故意不在 SAFE 因为 Firefox 不支持",
+        "修复（致命）：字幕标签和实际字幕错位（移动端选 Chinese Traditional 实际启用 Turkish） — cachedEmbedded 跨剧集 stale 是 root cause。loadedmetadata 监听本应清缓存，但用户切剧集时若 plyr 不及时 emit，缓存还是上一集的 stream list。stream index 在不同 episode 可能不同（罕见但发生）→ index 5 在上一集是 Traditional，在当前集是 Turkish 之类。新增 cachedEmbeddedFor key 「<collectionId>|<epFile>」，每次 menu open 强制比对 key，stale 自动重 fetch；fetch 内 race 检测（response 回来时 currentFile 已变）也兜底",
+        "修复（致命）：移动端字幕列表显示不全（最多到 Traditional） — 因为我们直接 set hidden 切 panel，不走 plyr 的 panel-switch 机制，plyr 没机会更新外层 .plyr__menu__container > div 的 inline height（仍是 home panel 的 ~100px）。新增 syncCaptionsPanelHeight() 在切到 captions panel 时手动 set wrapper height = min(panel scrollHeight, viewport × 0.55-0.6)；切回 home panel 时还原 home scrollHeight；capPanel max-height 也跟着 set 触发自身 overflow-y: auto。1.7.34 的 :has() 让 #player-container overflow visible 是必要前提，1.7.35 加上 wrapper height 同步才完整 work",
+        "Why：用户原话「描述和实际字幕错误，移动模式下我选择了繁体中文选项但是实际启用的为土耳其语；硬刷过程中有一次排版和数量都对，但是除了那次以后其他尝试测试时依旧显示不全，竖屏模式下最多到繁体中文选项；无敌少侠S1的资源无法播放音频」三连击"
+      ]
+    },
+    {
+      "version": "Release1.7.34",
+      "date": "2026-05-10",
+      "changes": [
+        "修复：移动端字幕子菜单仍显示不全 — root cause 不在 plyr 自身，是 #player-container { overflow: hidden } 切掉了向上扩展的 popup。Plyr 自带 .plyr--menu-open { overflow: visible } 处理了 .plyr 根元素，但 #player-container 是 plyr 的父元素未受影响。加 #player-container:has(.plyr--menu-open) { overflow: visible } 用 CSS :has() 让 menu 打开时父容器也放开，popup 可以向上溢出 video 区显示完整 38 行字幕。:has() 在 Chrome 105+ / Edge 105+ / Safari 16+ / Firefox 121+ 全部支持，无 polyfill 需求",
+        "Why：用户原话「好显示了，但是移动模式下列表显示还是不全」"
+      ]
+    },
+    {
+      "version": "Release1.7.33",
+      "date": "2026-05-10",
+      "changes": [
+        "修复（终极）：「字幕 ▶ <value>」永远卡「关闭」— 1.7.31/32 改 plyr.captions.active → .toggled → .plyr--captions-active class 都治标。Plyr toggleCaptions() 内部对这三个状态的更新时机不一致（active 仅 non-passive 写、toggled 同步、class 异步），任何一个都不可靠 right after 我们的 toggleCaptions(true)。改成「我们自己 own 字幕 label state」: closure 变量 currentCapLabel + updateCapValue(newLabel) 显式参数，每个 click 分支显式传 label（off/clear → 「关闭」、外置 → 文件名去扩展名、内嵌 → title/lang code）。Plyr 事件只作 passive 兜底（captionsdisabled / loadedmetadata 触发 reset 「关闭」）",
+        "修复：移动端字幕子菜单滚动条出不来 — Plyr 的 .plyr__menu__container > div { overflow: hidden } 把我们 panel 的 overflow-y:auto 切掉，用户只能看头几行。覆盖 .plyr__menu__container 加 max-height:70vh + .plyr__menu__container > div { overflow:visible } 让我们的 panel 自管 scroll；移动端进一步收紧 65vh / 55vh 留 plyr controls 空间",
+        "Why：用户原话「还是卡关闭；移动端目前的问题是字幕垂直列表显示不全」"
+      ]
+    },
+    {
+      "version": "Release1.7.32",
+      "date": "2026-05-10",
+      "changes": [
+        "修复（致命，1.7.31 治标错了）：「字幕 ▶ 关闭」value 仍卡在「关闭」即使字幕在显示。1.7.31 改读 plyr.captions.active 是错的 — 反编译 plyr.min.js 的 toggle() 函数发现 `.active` 只在非 passive 调用（toggleCaptions(value, false)）时赋值，单参数 toggleCaptions(true) 是 passive，`.active` 永远不更新。Plyr 内部用 `.toggled`（同步翻转）作为「captions 当前是否显示」的真相源。captionsAreOnLocal 改读 .toggled 立即生效。",
+        "改良：移动端 plyr 设置 popup + 字幕子菜单适配 — 移动端 popup 宽度放宽到 min(86vw, 360px) 让长字幕标签可读；字幕子菜单 max-height 50vh + 触摸目标加大（10/14 padding, 13px font, line-height 1.35）；长字幕文件名 word-break: break-word 允许换行（Invincible 系列 srt 文件名 50+ 字符）",
+        "Why：用户原话「我看还是卡在关闭；给这个新的功能做一下移动端适配」"
+      ]
+    },
+    {
+      "version": "Release1.7.31",
+      "date": "2026-05-10",
+      "changes": [
+        "修复（小但烦）：激活内嵌字幕后「字幕 ▶」value 文字仍显示「关闭」。captionsAreOnLocal 之前只看 .plyr--captions-active class on container，但 plyr 在 toggleCaptions(true) 后是异步（microtask/RAF）才把 class 加到 DOM 上 — 我们立即调 updateCapValue 时 class 还没出现 → 读到 false → 显示「关闭」。改为优先读 state.plyr.captions.active（plyr 内部同步 boolean，toggleCaptions 调用同步翻转），class 作为 fallback。state.pgs.visible 仍是优先级 1（PGS 路径不走 plyr）",
+        "Why：用户原话「激活内嵌字幕时设置中的描述显示关闭但是字幕其实出来了」"
+      ]
+    },
+    {
+      "version": "Release1.7.30",
+      "date": "2026-05-10",
+      "changes": [
+        "修复（致命，1.7.20 起的根因）：Plyr 配置加 `captions: { update: true }`。Plyr 默认 captions.update=false，仅监听 textTrackList 'removetrack' 不监听 'addtrack'，意味着所有 dynamic appendChild 的 <track>（外挂 addSubtitleTrack、内嵌 mountEmbeddedSubtitle 全都走这条路径）plyr 永远不知道 — plyr.captions.tracks 永远是 plyr 创建瞬间的快照。1.7.20 起的「内嵌激活不了」「外挂挂上但不显示」「toggleCaptions 沉默 no-op」一系列 race condition 全部源自这一行配置遗漏。grep plyr.min.js 找到铁证：`const e=this.config.captions.update?'addtrack removetrack':'removetrack'`",
+        "改良：字幕子菜单 #plyr-settings-captions-custom 加 max-height:60vh + overflow-y:auto。Invincible S03 mkv 内嵌 30 SRT + 8 外置 srt 共 38 行，plyr 默认 popup 无 max-height 导致菜单超出视频区域。仅限制我们的 panel 内部高度，plyr 主 popup 的高度过渡动画不受影响",
+        "Why：用户原话「无敌少侠S3字幕选择看不齐，这个部分需要加个滚动列表；所有的内嵌都激活不了；无敌少侠S3的外挂也出不来」三连击，前两个分别命中 captions.update 配置和 panel max-height，第三个外挂出不来其实跟内嵌同根因（同一段 toggleCaptions 路径）"
+      ]
+    },
+    {
+      "version": "Release1.7.29",
+      "date": "2026-05-10",
+      "changes": [
+        "重构（彻底）：删除 CC 按钮 + 删除 manual-subtitle-dialog，全部字幕功能迁移到 Plyr 设置菜单内的「字幕 ▶」自定义子菜单（peer of 速度 / 画质 / 音轨）。Plyr config 的 controls 数组移除 'captions'，settings 数组也移除 'captions'，让 Plyr 不再生成自己的 captions UI；我们 inject 的 字幕 menu item 是唯一字幕入口",
+        "实现：字幕 sub-panel 单一 radio list 合并三大数据源 — (1) 「关闭字幕」(默认 active when 无字幕)；(2) 内嵌字幕（async fetch /api/episode/.../embedded-subs，cachedEmbedded 按 ep 缓存，loadedmetadata 重置）；(3) 外置字幕（c.availableSubtitles 同步可得）。每行 [内嵌] / [外置] 前缀视觉区分。底部 「清除手动选择」非 radio 按钮做 LS + textTrack + PGS 三路 teardown",
+        "数据：Plyr 内置 sub-panel CSS 复用 — .plyr__control--forward / .plyr__control--back / role=menuitemradio 直接享 plyr 自带的 forward 箭头 / back 分隔线 / radio dot 视觉，零自定义 CSS",
+        "流程：单击 radio 行 = 挂 + 启用 + 关闭 popup 一步到位；选「关闭字幕」= toggleCaptions(false) + hidePgsRenderer；选「清除手动选择」= 清 LS + 移 track + dispose PGS + 关 popup。await setTimeout(0) 解决 plyr.captions.tracks 跟 textTrackList addtrack 的 race",
+        "清理：删 app.js 内 ~270 行 — CC 按钮 cloneNode 块（含 captionsAreOn / syncCapPressed） + manual-subtitle-dialog 三个 handler 块（cancel / clear / listEl click） + openManualSubtitleDialog + renderManualSubtitleList 函数。删 index.html 的 <dialog id=\"manual-subtitle-dialog\"> 整段。字幕字号 slider 删除（cycle 入口在主菜单仍在，line 1601）",
+        "Why：用户原话「不行，还是会打架，直接把cc按钮删了，功能迁移到播放设置中」 — 1.7.15 起的 6 个 rev 都在 CC 按钮和 plyr 设置菜单的状态机协同上栽跟头，删除一个端点是终极解法"
+      ]
+    },
+    {
+      "version": "Release1.7.28",
+      "date": "2026-05-10",
+      "changes": [
+        "重构：dialog 行点击改为「挂 + 开启 + 关闭弹窗」一步到位，删除「确认」按钮（HTML + handler 共约 170 行）。之前两步流程（点行 → 点确认）的第二步 toggleCaptions(true) 经常 race Plyr 的 textTrackList addtrack listener，currentTrack 赋值时 plyr.captions.tracks 还没填充导致 toggle 没生效，用户不得不去 Plyr 设置菜单手动选才能让字幕真显示。新流程在 row click 内 await setTimeout(0) 给 Plyr 一个微任务窗口同步 captions.tracks 后再 currentTrack + toggleCaptions(true)，PGS 走 showPgsRenderer + 同步 emit captionsenabled",
+        "数据：dialog actions 现在只剩两个按钮 — 「清除手动选择」（清字幕 + LS + 关 dialog）+「关闭」（仅关 dialog 不动字幕）",
+        "Why：用户原话「我需要先点击 cc 选择文件，然后去设置里开启，字幕才显示。你要不把 cc 字幕这个改成也能开，要不就把这个直接给删了，让字幕完全靠设置开」— 选了「也能开」方向，单步流程更符合用户心理模型「点字幕 = 字幕播」"
+      ]
+    },
+    {
+      "version": "Release1.7.27",
+      "date": "2026-05-10",
+      "changes": [
+        "改良：CC 按钮和 Plyr 设置菜单字幕子项不再打架。CC 按钮原本是「ON→关，OFF→弹 dialog」无脑分叉，导致用户从 Plyr 设置选 Off 关掉字幕后再点 CC，得重新打开 dialog 选一遍才能恢复。新逻辑三分支：(1) 当前显示中→关闭；(2) 已挂载但 OFF→直接 toggle 回开（PGS 走 showPgsRenderer，文字字幕走 plyr.toggleCaptions(true)）；(3) 完全没挂载→才弹 dialog 选轨。CC 按钮现在是真正的「toggle 当前字幕」开关",
+        "Why：用户原话「CC按钮和设置开关这两个在打架，优化这个逻辑」"
+      ]
+    },
+    {
+      "version": "Release1.7.26",
+      "date": "2026-05-10",
+      "changes": [
+        "修复（致命）：1.7.24 加的 /api/episode/:id/*/embedded-subs 路由因 path-to-regexp v6 的 wildcard + 末尾 literal 行为不符合预期而 100% fail（trailing literal /embedded-subs 在路由定义阶段就被剥离，runtime 时 wildcard 只含 ep 文件部分，我的 endsWith 检查永远失败，所有请求 400 'malformed path'）。改用 query string `?file=<encoded>`，路由签名改 `/api/episode/:id/embedded-subs`",
+        "修复：/subtitle-extract/:id/*  同样改为 /subtitle-extract/:id/:streamIdx.vtt?file=<encoded>，避开 wildcard + trailing literal 的 path-to-regexp 雷区",
+        "Why：用户原话「内嵌找不到外挂挂不上，都是无敌少侠第三季这套资源的问题」— curl 实测 embedded-subs 端点返回 'malformed path' 而不是字幕清单，dialog 收到空数组就不渲染内嵌区块"
+      ]
+    },
+    {
+      "version": "Release1.7.25",
+      "date": "2026-05-10",
+      "changes": [
+        "修复：1.7.23 的 forceShowSettingItems 嵌套在 audio-track inject 块内，inject 失败（非 ready 重入、homePanelInner 解析失败等场景）会让 force-unhide 路径整个跳过，导致用户看到的设置菜单还是「只有速度」一项。提到 ready handler 顶层独立执行，跟 audio-track inject 解耦",
+        "改良：force-unhide 双路兜底 — 同时清 [hidden] HTML 属性和 inline display:none（plyr 不同版本用不同隐藏机制），扫所有 panel（home + speed/captions/quality/audio-track 等子 panel），覆盖 [role=menuitem] 和 [role=menuitemradio]",
+        "改良：force-unhide 加 setTimeout(0) 二次触发 — plyr 在 'ready' 事件之后还会做一些微任务级 menu 变更（添加新 item 等），首次 force 跑得太早可能漏掉那些后加的 item，0-tick 异步再扫一遍兜底",
+        "Why：用户原话「字幕和音轨看不到任何选项」+ 1.7.23 的 inline 路径只在 audio-track inject 成功时跑 — 复盘发现两者 coupling 错误"
+      ]
+    },
+    {
+      "version": "Release1.7.24",
+      "date": "2026-05-10",
+      "changes": [
+        "新功能：mkv/mp4 内嵌文本字幕支持 — Chrome/Edge 不暴露 mkv 内嵌 srt 到 player.textTracks（chromium 长期限制），现在通过服务端 ffmpeg extract 走通：lib/ffmpeg.js 加 listEmbeddedSubtitles + extractEmbeddedSubtitle helpers；server.js 加 /api/episode/:id/*/embedded-subs（ffprobe 列文本字幕流）+ /subtitle-extract/:id/*/<idx>.vtt（ffmpeg map 该 stream 转 webvtt + 缓存到 data/subtitle-cache/<sha1>.vtt，二次访问命中缓存 O(1)）",
+        "实现：openManualSubtitleDialog 改成 async，外置字幕立即渲染 + 异步 fetch embedded list 完成后合并 re-render；dialog 用 ticket 号防止快速切换 ep 时 race 导致旧探测覆盖新内容",
+        "数据：dialog 行 dataset 新增 data-sub-embedded-idx / data-sub-label / data-sub-lang；行点击按 dataset 分支 — embedded 走 mountEmbeddedSubtitle（fetch /subtitle-extract → blob URL → <track src>），外置走原 PGS / addSubtitleTrack 路径；setManualSubFor 用 '@embed:N' 前缀区分内嵌 vs 外置文件路径",
+        "数据：自动恢复 manualSub 路径识别 '@embed:N' 前缀走 mountEmbeddedSubtitle，跨剧集时 stream index 通常稳定（Amazon rips 各集字幕 stream 排列一致）",
+        "排除位图字幕：ffmpeg.listEmbeddedSubtitles 的 TEXT_SUB_CODECS 白名单只放 subrip/ass/ssa/webvtt/mov_text/text — PGS / VobSub / DVB 这些 bitmap 字幕不能 transmux 到 webvtt 必须 OCR/burn-in，PGS 走 1.7.20 加的 libpgs 路径，VobSub 仍不支持",
+        "缓存：data/subtitle-cache/ 目录第一次访问时按 sha1(collectionId|epFile|streamIdx) 命名，O(200ms) ffmpeg extract 一次后命中即时返回；改名/移动 ep 文件自动 bust cache",
+        "Why：用户原话「做！」回应「Invincible S3 mkv 11 个内嵌 srt（含 Chinese Traditional）在 Chrome 用不上，需要 server-side ffmpeg extract」"
+      ]
+    },
+    {
+      "version": "Release1.7.23",
+      "date": "2026-05-10",
+      "changes": [
+        "改良：Plyr 设置菜单的「速度 / 字幕 / 画质 / 音轨」四项现在永远显示，即使当前视频对应功能没内容（captions textTracks=0、quality 单 source、audioTracks<2）。Plyr 默认会 hide 这些 items 让菜单只剩可用项，导致 Invincible S3（mkv 但 Chrome 没暴露内嵌 srt 到 textTracks）的设置菜单只剩「速度」一项 — 用户原话「字幕和音轨应该永远显示在播放器设置中，至于有没有可选项那另说」",
+        "实现：plyr ready 内 forceShowSettingItems()，遍历 home panel 的 [role=menuitem] 移除 hidden 属性，绑 ready/loadedmetadata/captionsenabled/captionsdisabled/languagechange 多事件触发；「音轨」item 也删了 conditional display:none，永远 visible",
+        "改良：「音轨」value 文字处理 0/1/N tracks — 0 显「无」，1 显该唯一 track label/language code/「默认」三级 fallback，N 显当前选中。子菜单空状态显示 disabled 占位行「当前视频没有可选音轨」",
+        "已知 Chromium 限制：mkv 容器内嵌 srt 字幕在 Chrome 不暴露到 player.textTracks（issue 长期存在）。Invincible S3 mkv 实测 11 个内嵌 srt（含 Chinese Traditional），Plyr 字幕子菜单看不到。规避路径：用户外置 srt（dialog 选）/ 用本地播放器 / 后续做 server-side ffmpeg extract subtitle to vtt"
+      ]
+    },
+    {
+      "version": "Release1.7.22",
+      "date": "2026-05-10",
+      "changes": [
+        "重构：音轨切换从控制栏独立按钮挪到 Plyr 设置菜单内，跟「速度」「字幕」「画质」同级。用户原话「把选择音轨和视频内软嵌字幕的功能整合到播放器组件那个设置里面，和播放倍速同级」",
+        "实现：plyr ready 内 walk 进 state.plyr.elements.settings.panels.home，找内层 [role=menu] 节点，append 一个 .plyr__control--forward 按钮（class 跟 plyr 自带 menu items 相同，享 plyr 的 right-arrow + hover 样式）；sub-panel 是 settings popup 内的 sibling div，含 .plyr__control--back 返回按钮 + role=menuitemradio 行（直接享 plyr 的 radio dot 指示）",
+        "导航：menu item click → hide 所有 peer panel → show 我们的 audio-track panel（mimic plyr 自身 panel switch via hidden 属性）；back btn → 反向；track radio → 切 audioTracks[i].enabled + close 整个 settings popup（emulate click 设置 cog）",
+        "Value 显示：menu item 主条目右侧的 .plyr__menu__value span 显示当前选中 track 名（label / language code / 「音轨 N」三级 fallback），跟 speed 显示「正常」/「1.5×」一致",
+        "可见性：audioTracks.length < 2 时 menu item display:none — 单音轨视频不出现条目；多音轨 mkv 才出现",
+        "清理：删除 1.7.21 控制栏 inject 的独立 .plyr__control--custom 按钮 + .audio-track-menu popover；删 style.css 对应 ~50 行 .audio-track-menu / .audio-track-row 规则（plyr 内置样式接管）",
+        "内嵌字幕：plyr 设置菜单的「字幕」子菜单是 plyr 默认行为，浏览器原生解析 mkv 后自动列出 textTracks（Hail Mary 的 2 个内嵌 SRT），无需额外代码 — 已经跟「速度」「音轨」同级"
+      ]
+    },
+    {
+      "version": "Release1.7.21",
+      "date": "2026-05-10",
+      "changes": [
+        "新功能：.mkv 加入 SAFE_NATIVE_VIDEO_EXTS 白名单 — 浏览器直接 byte-range 静态服务，duration / seek / 多音轨 / 多字幕轨全部保留。原有 /media-stream fragmented MP4 转码模式有三个硬伤：empty_moov 让浏览器只能从已接收 fragments 估算 duration（用户报「全长 20 秒」即一个 GOP）、不接受 Range 导致快进必须重启 ffmpeg（用户报「一快进就重播」）、ffmpeg -map 0:v:0?+0:a:0? 只保留首音轨首字幕轨（用户的 Hail Mary mkv 实际有 4 音轨 eng/hin/tam/tel + 2 内嵌 SRT 全被丢）",
+        "改良：player error code=4 (MEDIA_ERR_SRC_NOT_SUPPORTED) 自动 fallback 到 /media-stream — Firefox 没 mkv 解析器、Chrome 遇到 HEVC/DTS/TrueHD 等异常 codec 会触发原生失败，此时自动重发 /media-stream URL 让 ffmpeg 转码兜底。state.transcodeFallbackTried 防循环，每次切剧集 reset",
+        "新功能：Plyr 控制栏内注入「音轨」按钮 — Plyr 原生 UI 不支持 audioTracks 切换，自己 inject 一个按钮（在 captions 和 settings 之间）+ popover dropdown 列出 player.audioTracks，点选切换 enabled flag。仅当 audioTracks.length > 1 时显示，单音轨视频不出现。Track label 优先级：mkv 容器 title 标签 → BCP-47 language code 大写 → 「音轨 N」兜底。Firefox 不实现 audioTracks API，feature-detect 后按钮始终隐藏（fallback 到 /media-stream 走 transcode 路径，那里只有单音轨）",
+        "样式：.audio-track-menu absolute 定位在 plyr container 内 (fullscreen 兼容)，bottom/right 60px 跟控制栏右下对齐；.audio-track-row 当前选中行有 ✓ 前缀和 accent 色高亮",
+        "Why：用户原话「为什么我project hail mary的资源不是一口气读满1个多快2小时的轴而是20秒20秒左右的加载」+「我希望能保留mkv的全部数据，我这个hail mary的资源自己还带好几个音轨和字幕」。Hail Mary 是 H264+AAC 的 mkv，加 native 白名单后 Chrome/Edge/Safari 都能直接播，duration / seek / 4 音轨 / 2 内嵌字幕全部正常"
+      ]
+    },
+    {
+      "version": "Release1.7.20",
+      "date": "2026-05-10",
+      "changes": [
+        "新功能：支持 PGS (.sup) 蓝光图像字幕 — 客户端 libpgs.js 渲染（vendor/libpgs/, ~120KB raw / ~40KB gz, ESM bundle, 懒加载，仅用户首次选中 .sup 字幕时 dynamic import）；服务端零负担（DS124 不做 OCR/转码），.sup 文件作为静态资源直发；PgsRenderer 自动 hook video.timeupdate + 在 .plyr__video-wrapper 内创建 absolute 定位 canvas 覆盖；canvas pointer-events:none + z-index:2 不阻挡 Plyr 控制栏。 实测样本：Project.Hail.Mary.2026 的「挽救计划-简英特效.sup」",
+        "数据：config.js VIDEO_SUBTITLE_EXTS 加 .sup；后端 listAllSubtitles 自动收集；前端 addSubtitleTrack 对 .sup 早期 return false（避免 auto-load 把二进制 PGS 当文本硬塞 <track> 导致 Plyr 菜单显示但选了无效）",
+        "数据：state.pgs = { rendererClass, renderer, file, visible } 跟踪 PGS 状态，跟 state.subtitleBlobUrls 同生命周期（episode 切换 / 关播放器时 disposePgsRenderer）",
+        "重构：CC 按钮 captionsAreOn() 改成双路检查 — `state.pgs.visible` 或 `.plyr--captions-active` class 任一为真则按钮 pressed；CC 关闭同时 toggleCaptions(false) + hidePgsRenderer()；PGS 跟 Plyr 文字字幕互斥（任一开启另一会被关闭）",
+        "重构：dialog 行点击根据 sub.format 分支 — 'sup' 走 setupPgsRenderer，其它走 addSubtitleTrack；saveBtn 同样按格式分支启用，PGS 优先（state.pgs.renderer 存在则只 showPgsRenderer 不走 plyr 文字字幕路径）",
+        "Why：用户原话「sup格式字幕能用不」+ 项目 media 文件夹内出现 Project.Hail.Mary.2026-1080p.WEB-DL 的 .sup 字幕和 Spider-Man.Into.the.Spider-Verse 的 .ass + .idx + .sub。.sup 走 libpgs；.ass 已支持；.idx + .sub VobSub 暂不支持（错误文案明确告知用户预转 SRT）"
+      ]
+    },
+    {
+      "version": "Release1.7.19",
+      "date": "2026-05-09",
+      "changes": [
+        "修复（UX）：dialog 打开时已有行被预选中的视觉混淆 — 之前 openManualSubtitleDialog 读 LS 里 setManualSubFor 写的「上次手动选择」并给该行加 .active class，让用户以为「我还没选就被标了」。改为打开时所有行都未选；用户点击行才加 .active；LS 持久化保留（用于 setManualSubFor 的下次自动恢复字幕路径），只是不再驱动 dialog 视觉反馈"
+      ]
+    },
+    {
+      "version": "Release1.7.18",
+      "date": "2026-05-09",
+      "changes": [
+        "修复（UX）：「确认」报错「当前没有字幕可开启」即使合集有字幕 — 之前用户没点行直接点确认，saveBtn 检查 plyr.captions.tracks 空就报错。新增兜底：plyr.captions.tracks 空时 fallback 到 player.textTracks（filtered subtitles/captions kind）；都空但合集有 c.availableSubtitles 时自动挂第一个字幕（用 listAllSubtitles 已按 path 排序的第一个）；都没才真正报错",
+        "改良：错误文案加诊断数据 — 报「当前合集没有发现任何字幕文件」时同时附 collection/textTracks/plyrTracks/availableSubtitles 数量，方便定位是后端没扫到字幕还是前端 race condition",
+        "已知限制：.sub 格式不在白名单 — VIDEO_SUBTITLE_EXTS 当前是 .vtt/.srt/.ass/.ssa/.smi/.sami/.ttml/.dfxp。.sub 通常是 VobSub 二进制图像字幕（配 .idx）或 MicroDVD 文本格式，前者浏览器 <track> 不支持必须 ffmpeg burn-in，后者可加但需要新写一个解析器。本期不动；用户如果需要 .sub 支持单独开个工单"
+      ]
+    },
+    {
+      "version": "Release1.7.17",
+      "date": "2026-05-09",
+      "changes": [
+        "修复（致命）：「按下确认字幕仍不显示」根因是跟 Plyr 渲染机制对抗。Plyr 强制接管 cue 渲染：检测到 textTrack.mode='showing' 立刻改成 'hidden'，然后用 cuechange 事件把 cue 内容画到 .plyr__caption div。此前 1.7.15-1.7.16 saveBtn 强写 mode='showing'（且 setTimeout 兜底再写一次）跟 Plyr 拉锯，结果 mode 卡在 'showing' → Plyr 不接管渲染（条件是 mode='hidden'）→ .plyr__caption div 是空的 → 同时浏览器原生 cue 被 .plyr__captions overlay 挡掉 → 双向都不显示字幕",
+        "重构：字幕状态判断 + 操作全部改走 Plyr API。captionsAreOn() 从「读 textTrack.mode」改成「读 .plyr--captions-active class on container」（这是字幕真正可见的 CSS 条件）；saveBtn 不再写 textTrack.mode，只调 plyr.currentTrack=plyrIdx + plyr.toggleCaptions(true)，让 Plyr 自己驱动 mode='hidden' + cuechange 渲染；CC 关闭只调 plyr.toggleCaptions(false)，不再硬写 mode='disabled'",
+        "重构：saveBtn 的 track pick 走 plyr.captions.tracks（已按 kind 过滤的 caption track 列表）而不是 player.textTracks，currentTrack 索引天然对齐 Plyr 设置菜单",
+        "清理：移除 player.textTracks 'change' listener（之前用来在硬写 mode 后同步按钮 pressed；现在不再硬写 mode，Plyr 的 captionsenabled/disabled 事件就是真相）",
+        "改名：dialog 主按钮「保存并开启」→「确认」；行点击 toast「已选中字幕 — 点「确认」启用」",
+        "重构：删除外置「+ 字幕」按钮（player-info-right 内），CC 按钮成为唯一字幕入口"
+      ]
+    },
+    {
+      "version": "Release1.7.16",
+      "date": "2026-05-09",
+      "changes": [
+        "重构：字幕选择只保留 Plyr 控制栏内 CC 按钮一个入口 — 删除外置「+ 字幕」按钮（player-info-right 内）",
+        "改名：dialog 主操作按钮「保存并开启」→「确认」"
+      ]
+    },
+    {
+      "version": "Release1.7.15",
+      "date": "2026-05-09",
+      "changes": [
+        "修复：CC 字幕按钮在没有 'showing' track 时仍显示 pressed — captionsAreOn() 不再读 plyr.captions.active（那是 LS 持久化的用户偏好，跨剧集残留），只看真实 textTrack.mode",
+        "修复：字幕选择后无法显示 — saveBtn 的 pick 优先 '手动: ' label 前缀的 track（之前 fallback pick=0 命中第一个 auto-attached track），调用顺序改为 toggleCaptions(true) → 写 mode='showing' → currentTrack 设到 plyr.captions.tracks 索引；setTimeout 0 兜底再写一次 mode 防止 Plyr 同步 listener 反弹",
+        "新功能：手动字幕选择器 dialog 加「保存并开启」按钮 — 行点击只挂载不显示，保存按钮显式翻 mode='showing'；行点击 toast 「已选中字幕 — 点保存并开启开始显示」明示两步流程",
+        "新功能：Plyr CC 按钮（控制栏内）始终可见 — CSS 强制 display:inline-block 覆盖 Plyr 默认无 track 隐藏；clone-replace 接管 click handler，OFF→打开 dialog，ON→toggleCaptions(false)+所有 track mode='disabled' 双路兜底；--pressed class 由 captionsenabled/disabled/languagechange/textTrackList change 多事件源驱动",
+        "改良：视频播放器移动端排版 — ≤600 portrait 加 sidebar 50vh 限高 + sticky head + 6 控件改 3-per-row 36 高 button strip + .player-info-right .play-switch promote 为 bordered cell；601-768 平板/小窗切 column；landscape ≤500h sidebar clamp(160,30vw,220) + 重置 portrait sticky；≤380 walkman 极小屏字号 / padding 再压一档"
+      ]
+    },
+    {
+      "version": "Release1.7.14",
+      "date": "2026-05-09",
+      "changes": [
+        "新功能：字幕字号从 3 档 cycle 升级为连续 0.5x → 2.5x slider — 「+ 字幕」dialog 顶部加 slider + 数值 readout + 重置 1.0x 按钮；live-drag 实时改 video::cue 和 .plyr__caption 字号；slider input 触发 applySubScale() 写 LS + 同步设置菜单的 cycle 标签",
+        "数据：CSS 引入 --sub-scale custom property（默认 1）替代 data-sub-size 三档硬编码；video::cue + .plyr__caption 用 calc(1em * var(--sub-scale))；保留 data-sub-size attribute selector 作为旧 LS 值（small / medium / large）的首屏 fallback，等 app.js 启动后被实际 --sub-scale 数值覆盖",
+        "数据：state 字段 subSize（'small'|'medium'|'large' enum）改为 subScale（数值 0.5-2.5）；ds124:subSize LS key 复用，旧值（'small' / 'medium' / 'large'）启动时自动 coerce 到 0.75 / 1.0 / 1.4；新值是数字字符串",
+        "数据：菜单 popover 的「字幕字号」cycle 项保留作为快速档位切换 — 5 stops [0.6, 0.8, 1.0, 1.4, 2.0]，下一档严格大于当前值，最大 wrap 回最小；cycle 跟 slider 双向同步（cycle 切换会更新 slider position，slider 拖动会更新 cycle 标签）",
+        "Why：用户原话「多加一个调整字号的功能」 — 现有 3 档过粗，加 slider 给精确控制；放进「+ 字幕」dialog 顶部让字幕相关操作集中（挂载 + 字号），不挤播放页右下控件区"
+      ]
+    },
+    {
+      "version": "Release1.7.13",
+      "date": "2026-05-09",
+      "changes": [
+        "新功能：视频播放页加「+ 字幕」手动字幕选择 — 在不影响 1.7.12 自动按 stem 挂载的前提下，让用户可在同一合集（含子目录递归）的任何字幕文件中手动挑一个挂到当前集；选择后用「手动:」前缀标 default 进入 Plyr 字幕菜单；本集字幕选择持久化到 localStorage（key ds124:manualSub:<collectionId>，value JSON object epFile→subFile），下次进入同集自动恢复；按钮 tooltip 提示自动挂载仍然有效，无需手动选已同名的字幕",
+        "数据：lib/collections.js 加 listAllSubtitles(folderAbs) helper（复用 scanSidecars 输出，扁平化所有字幕文件清单 + 按 path locale-numeric 排序）；getCollection() 返回新增 availableSubtitles 字段（仅详情/播放页路径调用，不污染列表 API）",
+        "数据：app.js 把原 loadSubtitles 内联的 fetch+convert+blob+track 逻辑抽成 addSubtitleTrack(collectionId, sub, opts) helper，自动挂载和手动挂载共用；opts 含 defaultTrack（是否标 default）+ labelPrefix（手动选用「手动: 」前缀方便用户在 Plyr 菜单区分）",
+        "新功能：picker dialog 渲染按子目录分组（用 file 路径 lastIndexOf('/') 分组），每条字幕显示文件名 + lang 标签 + .ext 格式标签；当前已挂的手动字幕高亮 active；空状态提示用户怎么放字幕；「清除手动选择」按钮删 LS 槽 + remove 所有 label 以「手动: 」开头的 <track>",
+        "Why：用户原话「视频版的就不强求自动挂载了，文件管理量太大；现有的功能保留，不删了；增量更新一下内容：让用户可以自己手动选择观看时使用的字幕文件，字幕与视频必须在同一合集下（文件夹）才能被该视频选择，支持搜索子文件夹」 — 自动挂载（按 stem 同名）保留，加手动选择路径覆盖大目录场景；availableSubtitles 用合集级 scope（资源 root 是 collection 文件夹），自然满足「同合集」约束"
+      ]
+    },
+    {
+      "version": "Release1.7.12",
+      "date": "2026-05-09",
+      "changes": [
+        "新功能：视频外挂字幕扩支持 ASS / SSA / SAMI / SMI / TTML / DFXP — 之前只认 .vtt + .srt（浏览器原生 / 易转 VTT），现在加 4 类纯文本字幕格式的客户端转换器：assToVtt（剥 ASS override block + \\N \\h escape）、smiToVtt（SAMI SYNC 块配对，&nbsp; 视为 cue 终止）、ttmlToVtt（TTML / DFXP XML <p begin/end> 提取，秒数 4s/6.5s 与 ISO 时间双解析）；config.js VIDEO_SUBTITLE_EXTS 加 .ass / .ssa / .smi / .sami / .ttml / .dfxp",
+        "新功能：subtitleToVtt() 主入口加未知格式自动嗅探（按文件头判断 webvtt / [Script Info] / <SAMI / <?xml），即使 sidecar 标签写错也能正确转",
+        "数据：每集仍走「按 stem 分组扫多个 sidecar」的现有路径（lib/collections.js scanSidecars 不动），所以一集挂多套字幕（两个 .ass + 一个 .srt 之类）继续 work；Plyr 控件栏切字幕轨即可",
+        "未支持：图像字幕格式（.sub+.idx VobSub / .sup PGS）— 浏览器无法原生渲染，需要 OCR 或 ffmpeg 烧入流。用户需先用 SubtitleEdit / SupRip 等工具 OCR 转成 .srt 再放入合集",
+        "Why：用户原话「这个视频需要适配其提供的至少两套外挂字幕；要求适配现在互联网上和 DVD 或蓝光碟解包常见的外挂字幕类型文件」 — 多套字幕本来就支持（ep.subtitles 是数组 + 自动按 lang 分轨），缺的是格式扩展；本次补齐文本类外挂字幕的全部主流格式"
+      ]
+    },
+    {
+      "version": "Release1.7.11",
+      "date": "2026-05-09",
+      "changes": [
+        "修复 (Q1)：admin 统计页「hidden」计数没包含被 hidden 标签 taint 的合集 — server.js:1821 admin/stats 的 digest() 之前只数 c.hidden=true（合集自身被勾隐藏的），漏掉了「合集挂的 type 在 categoriesStore.effectiveHiddenIds(kind) 里 → 整树被父标签 taint」的情况；现在改为 hiddenSelf + hiddenByTag 之和，并额外在 response 里 surface hiddenSelf / hiddenByTag 两个字段供前端可能的细粒度展示",
+        "修复 (Q3)：从 mini player 展开回详情播放页时 currentTime 被重置 — Blink/WebKit 在 <video> 元素跨父 appendChild 时有时会触发 media element 的 invoke load 算法导致 currentTime 复位（spec gray area）；mountVideoIn 函数加保存/恢复逻辑：移动前 snapshot currentTime + paused 状态，appendChild 后比较 currentTime 是否漂移 > 0.5s 重置回去，paused 状态翻转就重新 play。覆盖所有 mountVideoIn 调用点（mini ↔ player ↔ detail 全部受益）",
+        "新功能 (Q4)：高级搜索支持「按集数 / 单曲」字段 — server.js:644 allowedFields 加 'episodes'；扫每个合集的 episodes 数组，把 ep.title + ep.file 拼成 episodesText 参与合集级 term AND 匹配；同时记录每个 episode 对所有 term 都命中的 matchedEpisodes 列表（cap 10 / 合集），返回在 hit 对象的 _matchedEpisodes 字段",
+        "新功能 (Q4 前端)：search-page 范围 checkbox 加「集数 / 单曲」；搜索结果卡片 DOM 改为 .search-card>.search-card-link+.search-card-episodes 嵌套（避免 HTML 禁止的 nested anchors），命中的 episodes 渲染为可点击 chip 直接跳到 player；CSS 加 .search-card-episodes / .search-card-ep 样式",
+        "Why：用户使用反馈四个问题（统计 hidden 漏算、视频 resumeMode 找不到、mini→player 重置进度、搜索不到单集）— 其中 Q2「视频 resumeMode」按用户决定不修（设计上 audio-only），Q1/Q3/Q4 全部确认是 bug 或缺失，本次三件一并修"
+      ]
+    },
+    {
+      "version": "Release1.7.10",
+      "date": "2026-05-09",
+      "changes": [
+        "文档：README 双语加 B.5 节「升级到新版 / 修复损坏的安装」 — 解释 Inno Setup 已经原生支持的两个能力：(a) 双击新版 setup.exe 自动检测旧版（固定 AppId）+ 预填路径 + Restart Manager 关进程 + 覆盖所有程序文件，data/ 和 Resource/ 不动；(b) 同版本或更高版本 setup.exe 可重跑作为修复手段（[Files] 全 ignoreversion 标志 → 等同完整重装但保留用户数据）",
+        "数据：.iss 配置文件本身无需改动 — AppId={B5E8C7C1-9C4A-4F93-AA13-5C6F8C6E7A01} 固定 + ignoreversion + CloseApplications=yes + UsePreviousAppDir=yes（默认值）+ data/Resource 不在 [Files] 也不在 [UninstallDelete] —  这套组合早就让升级 / 修复 work，本次只是把这个能力写进 README 让用户知道",
+        "Why：用户原话「检查一下安装器是否支持安装时进行版本更新和修复...重新运行或是已有安装位置运行应该能修复损坏的文件」 — 验证后确认现状已支持，仅缺文档说明"
+      ]
+    },
+    {
+      "version": "Release1.7.9",
+      "date": "2026-05-09",
+      "changes": [
+        "文档：项目根目录 README/ 文件夹下重写双语 README — README.zh.md + README.en.md，覆盖：开头作者免责声明（这是个人项目，AS-IS，不提供技术支持，部署不出来请自己想办法）+ 大段醒目「使用前必读」安全风险声明（明文密码 / 无 HTTPS / Session 30 天 / Node 以 admin 身份运行 / 部署前自查 UPnP / IPv6 / WAN 管理 三件事）；NAS DSM 部署 10 步从启用 SSH（控制面板 → 终端机 → 端口 451 + 取消 telnet）到安装 Node.js 套件、创建 4 个共享文件夹（video / audio / Manga / Novel）、SSH 免密配置（Win / Mac / Linux 各自指令）、tar 流式上传、npm install、首次启动、nginx 反代 80 端口、任务计划开机自启、日常维护；Windows 本地三种方式（一键安装包 / 手动 Node / 关闭 / 重置）",
+        "文档：明确不包含的内容（DevLog / WinBuild / 问题资料 / 资源文件管理 — 项目维护者私有文件夹，发行版 tar exclude 跳过）；明确风险等级表（家庭 LAN 内 vs 公网下）+ 公网无意识暴露的 5 条路径（UPnP / DMZ / IPv6 / QuickConnect / 路由器弱口令）",
+        "文档：删除项目根目录的旧 README/README.md（版本号停留在 AlphaV1.42.46，过期且包含开发者文档），由两份新双语版本取代",
+        "Why：用户原话「正式发行版不应该包含 DevLog WinBuild 问题资料 资源文件管理 这几个文件夹...项目的 readme 不应该包含这些内容；按照现在项目具体情况重写重构 readme...细致到可能的每一步（比如说 ssh 配置和 dsm 设置等），确保弱智也能看懂；最后一定要在开头阐明使用这套系统的风险和危害」"
+      ]
+    },
+    {
+      "version": "Release1.7.8",
+      "date": "2026-05-09",
+      "changes": [
+        "新功能：主题名从 i18n 字典迁移到 CSS 模板自身 — 每个 style/<id>.css 在 :root[data-theme=<id>] 块里声明 --theme-name: \"...\"，app.js 启动时遍历 #theme-select 的每个 option，临时 stamp data-theme + getComputedStyle 读 --theme-name + 剥引号 + 写回 option.textContent；主题名是 locale 无关的（同一个 \"Sepia\" 在所有 UI 语言下都显示 \"Sepia\"）",
+        "数据：移除 zh / en / zh-TW 字典里的 header.theme.dark / light / division 三条（共 9 条翻译），字典 107 → 104 keys；index.html 主题 <option> 上的 data-i18n 属性也一并删除；dark.css / light.css / division.css 各自 :root 块顶部新增 --theme-name + max-length 注释 (~12 chars)",
+        "新功能：项目根目录新增 CustomTemplate/ 文件夹存放空模板 + 双语教程 — README.md (短入口) / TUTORIAL.md (中英完整教程：创建 / 修改 / 部署 / 选择 / 字段含义 / FAQ) / style/_template.css (新主题脚手架，每个变量超详细注释 + 推荐取值 + 三个 bundled 主题参考值 + 装饰特效模板) / language/_template.json (104 key 全列出值留空) / language/_template.json.md (逐 key 字段表：含义 + max length + UI 位置 + zh/en/zh-TW 示例)",
+        "Why：用户原话「主题的名称为什么也有翻译，那这样我岂不是每次更新主题或者更新语言都要适配？」+「让主题名称储存在自己的模板里面，不再使用语言翻译」+「在项目根目录创建一个 CustomTemplate 文件夹...给空模板拉满注释」+「教用户如何创建，修改模板，部署模板到项目，如何选择，字段含义...中英两版」 — 三条诉求一次满足。N=主题数 × M=语言数 矩阵在主题名维度被打破，加新主题 = HTML 加 option + style/<id>.css 即可，无字典更新；CustomTemplate 让小白拿现成模板填空也能产出可用的新主题/语言",
+        "数据：CustomTemplate/ 在 public/ 之外，express.static 不会服务它，纯文档/脚手架定位"
+      ]
+    },
+    {
+      "version": "Release1.7.7",
+      "date": "2026-05-09",
+      "changes": [
+        "新功能：i18n 字典翻译变为「可选 override」— applyI18n() 缺译时不再 fallback 到 zh 字典或 raw key，改为回退到 HTML 元素自身的 baseline 文案（首次访问该元素时缓存到 dataset.i18n*Fallback）；翻译写在字典里就 override，不写就保留 HTML 原文。意味着加新主题/新语言不再强制 N×M 字典维护",
+        "影响：加新主题（如 sepia）→ HTML 加 <option value=\"sepia\" data-i18n=\"header.theme.sepia\">棕褐</option> + style/sepia.css 即可；header.theme.sepia 翻译条目「可选」，不加时所有语言都显示「棕褐」。加新语言（如 ja）→ language/ja.json 起步只需翻译核心 30-40 个高频 key，主题名 / 罕用文案缺译都自动 fallback 到 HTML baseline，不会出现 raw key 或残缺英文",
+        "Why：用户原话「主题的名称为什么也有翻译，那这样我岂不是每次更新主题或者更新语言都要适配？」— 之前 contract 强制每个 [data-i18n] key 在每个 locale 字典里都要有条目（缺则显示 raw key），N=主题数 × M=语言数 维护负担线性增长；新 contract 把翻译降级为「可选 enhancement」，不影响已有翻译（dark/light/division × zh/en/zh-TW 9 条仍全部生效）",
+        "数据：t() 编程调用接口不变（仍 active → zh → raw key），用于 setCatStatus / 编辑面板 HTML 等无 element baseline 的场景；HTML data-i18n 走 applyI18n 路径享受新 fallback 策略；两条路径分工明确",
+        "实现：applyI18n 内 resolve() helper 接 (el, key, fallbackDatasetKey, currentValue)，首次访问时把 currentValue 缓存到 el.dataset[fallbackDatasetKey]；后续每次切换 locale 时如果 dict 缺 key，写回缓存值"
+      ]
+    },
+    {
+      "version": "Release1.7.6",
+      "date": "2026-05-09",
+      "changes": [
+        "新功能：主题装饰特效作用域收紧到「主界面 view-home」 — 用户原话「所有特效都仅在主界面生效，进入合集详情页或者播放页都别播这特效」。app.js 新增 watchActiveView() MutationObserver IIFE，监听全部 section.view 的 hidden 属性变化，把当前可见 view 的 id（去掉 view- 前缀）实时写到 <html data-view='X'>；初次执行 + 后续每次 view 切换都同步",
+        "数据：division.css 里 5 个装饰特效 selector 全部从 :root[data-theme='division'] xxx 升级为 :root[data-theme='division'][data-view='home'] xxx — scanline 主规则 + scanline reduced-motion + 远景雪 + 近景雪 + 雪 reduced-motion；变量字典本身（line 51 块）不带 [data-view] qualifier，因为颜色 palette 切换在所有 view 都该一致生效，特效作用域收紧只针对「motion / overlay」",
+        "新契约（写入 division.css @file 注释）：「装饰特效（overlay / 粒子 / 动态背景）必须用 [data-view='home'] qualifier 修饰；变量字典不带」；后续所有主题模板沿用此约定 — task-focused 屏（detail / player / gallery / admin / login / search / novel / audio-player）保持纯净",
+        "实现：MutationObserver 一次性注册到所有 section.view 上监听 attributeFilter:['hidden']，覆盖 ~10 个分散的 hideAllViews / show-step 调用点，零 setActiveView() handshake 侵入；hideAllViews 在 1591 等 10 处调用 + 各 show 路径未集中，observer 是 minimum-touch 同步方案",
+        "Why：用户在合集详情页阅读元数据 / 播放器看视频 / admin 编辑标签时，环境动画分散注意力；首页是浏览态可以放松视觉，但任务态屏要纯净。这条 contract 让用户体验「主题视觉签名仅在浏览时显示」"
+      ]
+    },
+    {
+      "version": "Release1.7.5",
+      "date": "2026-05-09",
+      "changes": [
+        "新功能：division 主题加双层视差雪花特效 — 远景层 (html::before) 22 个 1px 半透明白点 (alpha 0.55) + 近景层 (body::before) 18 个 2-3px 高透白点 (alpha 0.85)，两层 background-image 各含 N 个 radial-gradient 在 100vh tile 内伪随机排布；远景 26s linear infinite + 近景 14s linear infinite 共同跑出视差错觉（远的飘得慢、近的飘得快），两层不同 grid 偏移避免同位重叠",
+        "数据：用 transform: translate3d(0, 100vh, 0) 一个 tile 高度做无缝循环；background-size: 100% 100vh + repeat-y 让同一个 tile 在伪元素 box (200vh 高) 内向上+向下重复；GPU 合成层零 paint 开销",
+        "数据：z-index 分层 — 9999 scanline (1.7.4) > 9998 近景雪 > 9997 远景雪 > 应用内容；三层全 pointer-events:none 不阻挡交互",
+        "数据：@media (prefers-reduced-motion: reduce) 同时冻结两个雪花层动画 (位置静止但仍可见)，跟 1.7.4 scanline 的无障碍兜底一致",
+        "Why：用户在 1.7.4 落地 scanline 之后回过头要「扫描线 + 下雪」双特效；扫描线贴 ISAC HUD，雪花贴 Division 1 故事中感染冬季的纽约背景，组合后主题视觉签名更完整"
+      ]
+    },
+    {
+      "version": "Release1.7.4",
+      "date": "2026-05-09",
+      "changes": [
+        "新功能：主题模板支持携带动态特效 — 1.7.2 定下「style/<id>.css 只放 :root[data-theme=X] 变量字典」的契约升级为「主题文件可以包含任何以 :root[data-theme=X] 为前缀的 CSS 规则（组件级 override / 伪元素 / keyframes / @media 全部合法）」；变量字典仍是最低契约，特效是 opt-in flair；切主题时 cascade 自动应用/撤销，零 JS 协调",
+        "新功能：division 主题加 ISAC HUD 标志性扫描线 — body::after 一个 fixed 全屏伪元素，pointer-events:none + z-index 9999；4px 周期的 repeating-linear-gradient（1px 橙色 rgba(255,122,0,0.06) + 3px 透明）+ keyframes division-scanline 9s linear infinite 让线条缓慢下移；translateY 一个完整 period (4px) 即无缝循环，GPU 合成层零 CPU 开销；@media (prefers-reduced-motion: reduce) 自动冻结动画满足无障碍要求",
+        "数据：dark.css / light.css 不动；division.css 内部 @file 块的旧 @note (说「No layout / typography overrides」) 改为「Theme files may carry more than the variable palette...」反映新契约；这是 1.7.2 模板系统的能力扩展，非破坏性改动",
+        "Why：用户在体验 division 主题时希望它更贴 ISAC HUD；扫描线是 The Division 标志性视觉之一；同时此举证明主题模板系统可扩展到非纯 palette 视觉效果，为后续主题（sepia 颗粒 / cyberpunk 故障文字 等）铺路",
+        "未做（留 1.7.x 后续）：雪花粒子（CSS only box-shadow 多点 hack 难维护，JS canvas 引入主题 manifest 复杂度，本期 ROI 偏低）；扫描线密度/速度参数化为 CSS 变量（YAGNI 留第二个用扫描线的主题出现时再做）；显式「禁用主题特效」UI 开关（当前完全靠 OS prefers-reduced-motion）"
+      ]
+    },
+    {
+      "version": "Release1.7.3",
+      "date": "2026-05-09",
+      "changes": [
+        "新功能：主题 select + 语言 select 加前置 SVG logo — 主题用调色板（圆形外轮廓 + 拇指洞 + 4 个内部色点），语言用地球（圆 + 经线椭圆 + 赤道线）；inline SVG + currentColor 跟随主题色变化（hover 转 --accent），不需要图片文件，矢量缩放清晰；新增 .header-select-wrap / .header-select-prefix / .header-select-with-icon 三件式 CSS layout，select 让出 28px 左 padding 给 absolute 定位的 SVG 浮在前面，pointer-events:none 不阻塞 select 交互",
+        "新功能：admin 面板 i18n 全覆盖（除标签数据本身） — admin 5 tab（用户/统计/健康/分类/重复检查）+ 重扫媒体库按钮 + 健康 tab 的「重新扫描」「清理孤立数据」+ 分类 tab 的导出/导入配置/4 板块 sub-tab/4 板块 section label/sort 按钮 title/编辑面板 empty hint/保存/重新加载 + 编辑面板内全部字段（标签名/隐藏/父标签/升顶/+ 子/删除/关联字词 label + input placeholder）+ chip 行末「+ 新建顶层」「+ 新建子集」+ 扁平命中 empty 文案 + cat-add-child-dialog（标题/字段/取消/添加/全部错误信息）+ 全部 setCatStatus 调用（已添加/已删除/父改/升顶/隐藏改/关联字词改/已排序/保存中/已保存/保存失败）+ 重复检查 tab（4 板块/嫌疑模式/相似度模式/阈值/刷新/标为非重复/查看白名单 + 一切 title）",
+        "数据：i18n 字典 32 → 107 键 × 3 语言（zh / en / zh-TW），共 321 条翻译；t() 函数升级支持 {placeholder} 参数化（t('admin.cat.added', { id, where })），回避中英文语序差异（中文「已添加 X（作为 Y 的标签）」vs 英文「Added X (under Y)」可以独立翻译）",
+        "数据：i18n 覆盖范围尚未到的部分（按使用频率从高到低）首页 toolbar / 详情页 / 播放器 / 字幕 / 灯箱 / 小说阅读器 / PDF / 上传 / 用户管理 / 统计 / 健康详情 / 各 dialog（创建合集 / 编辑合集 / 批量改标签 / 批量改作者 / 封面 / 改密 / 等），仍硬编码中文，留 1.7.x 后续按 namespace 分批补 data-i18n + 字典翻译",
+        "代码注释：本轮 _renderEditPanelHtml / t() / 主要新增函数都按 user feedback 用英文 Doxygen 风格补满"
+      ]
+    },
+    {
+      "version": "Release1.7.2",
+      "date": "2026-05-09",
+      "changes": [
+        "新功能 (REFACTOR)：表现层 + 系统文本完全模板化 — 外观 palette 从 style.css 抽到 public/style/<id>.css 一文件一主题；系统文本从 app.js 内联 I18N_DICT 抽到 public/language/<id>.json 一文件一语言。加新主题/语言现在是文件创建操作，零 JS / CSS 编辑（除一个 HTML link/option 注册）",
+        "新功能：第一个测试新主题 division.css — 全境封锁 ISAC HUD 风格（深战术黑底 + 招牌橙 #ff7a00 强调 + 暖米色文本 + 橙色 panel-shadow 微 bloom），证明 style/<id>.css 模板可用",
+        "新功能：第一个测试新语言 zh-TW.json — 繁体中文（影片 / 音訊 / 圖片 / 小說 / 設定選單 / 進階搜尋 / 等），证明 language/<id>.json 模板可用",
+        "数据：移动 :root[data-theme=dark] / :root[data-theme=light] 块从 style.css 到 style/dark.css + style/light.css；index.html 加 link 三个 .css；首屏 inline script 的 KNOWN_THEMES 从 ['dark','light'] 扩到 ['dark','light','division']",
+        "数据：app.js getKnownThemes() / getKnownLangs() 从 #theme-select / #lang-select 的 <option> 列表运行时读取，HTML 加 option = 该主题/语言被识别；loadI18nDicts() 启动时 Promise.all 并行 fetch language/<id>.json，缺失/失败的 locale 自动 fallback 到 zh 字典+raw key",
+        "数据：window.DS124_I18N 暴露 dict/t/setLang/applyI18n/getLang/reload，console 或 plugin 可以热更字典：window.DS124_I18N.dict.fr={...}; setLang('fr')",
+        "Why：用户要求「外观 + 语言双模板化」便于后续扩展；以前 i18n 字典在 app.js 内部，主题在 style.css 内部，加新主题/语言要改这两个大文件。现在新文件丢进对应文件夹 + 一行 HTML 注册即可",
+        "代码注释：本轮新建/修改的 JS / CSS / HTML 全部用英文 Doxygen / JSDoc 风格补满（@brief / @param / @returns / @section / @note），覆盖默认「不写注释」的全局规则；user feedback 已写 memory",
+        "未做（留 1.7.x 后续）：style.css 仍有约 30 处 :root[data-theme=light] .selector { color: #xxx } 散落 override（卡片名 / 播放器背景 / Plyr 控件等），破坏「主题=变量字典覆盖」纯模板原则；新主题（如 division）这些点暂未补 light 等价 override，但因为 division 自身用 CSS 变量正常工作，视觉不会崩，只是某些细节（card-name 颜色覆盖）在 division 下沿用 light 的硬编码。后续清理把这些硬编码点抽为新变量"
+      ]
+    },
+    {
+      "version": "Release1.7.1",
+      "date": "2026-05-08",
+      "changes": [
+        "修复 (UX)：admin 分类管理过滤栏 placeholder 从「过滤标签」改为「快速搜索标签」，反映 1.7.0 之后的实际行为（命中条目 click 跳转到编辑位置，不是隐藏不匹配 chip）",
+        "新功能：admin chip click 改为「同层互斥单链 drilldown」 — 之前是 toggle 多选 (filter 风格保留多 parent 同时展开)，但 admin 没有筛选语义 (无 OR/AND/NOT)，多选歧义大；现在点新 chip 替换该层 selection 同时清掉所有更深层；点 active chip 退出编辑；新增 _trimSelectionAtDepth + _setActiveChain 替代 _revealAncestorChain，所有创建 / 改 parent / 搜索跳转都走「替换整条 chain」语义",
+        "新功能：顶部栏「明暗切换」按钮改为「主题下拉 select」(#theme-select)，含 dark/light 两选项；为后续新主题预留入口（加新主题 = :root[data-theme=\"X\"] 定义全部 CSS 变量 + <option> + i18n key 三步）；旧 .theme-toggle .dot.d/.l 圆点指示样式删除",
+        "新功能：顶部栏新增「语言下拉 select」(#lang-select)，含 zh/en；持久化 ds124:lang LS",
+        "新功能：i18n 基础设施 — I18N_DICT 字典（zh/en，namespace.key 结构）+ t(key) helper + applyI18n(root) 扫 [data-i18n / -title / -placeholder / -aria-label] 设值 + applyLang(lang) 切换；window.DS124_I18N 暴露 dict/t/setLang/applyI18n 给 console / 后续 plugin；缺失键自动 fallback 到 zh 让半翻译态可读；加新语言 = 在 I18N_DICT 加一份键值对 + 加 <option> 两步，无需改 JS 逻辑",
+        "覆盖 (1.7.1)：header (back / kind switch 4 个 / user pill / login / create / search / history / theme select / lang select) + menu-popover (history / admin / 自动小窗 × 2 / 音频悬浮模式 label / 字幕字号 label / 修改密码 / 登出) + adminCat 搜索 placeholder",
+        "未覆盖 (留 1.7.x 后续)：admin 编辑器内部所有按钮 / 字段 label / status 文案；十几个 dialog (创建 / 编辑 / 批量改 / 重复检查 / 封面 / 改密 / 上传 / 等)；toast 错误信息；首页 toolbar (排序 / 高级搜索 / 仅看收藏 / 含隐藏 / 批量管理 等)；详情页 / 播放器 / 字幕 / 弹幕 / 全部命名按钮；总量约几百个字符串，按 namespace 分批补 data-i18n 标注 + 字典补译，UI 形态不动",
+        "未覆盖 (架构清理)：light 主题 :root[data-theme=\"light\"] 仍有约 30 处直接硬编码颜色（#000000、#0a0a0a、#333333 等），不是覆盖 var() 而是直接写 color；这些违背「主题=变量字典覆盖」的纯模板化原则，加新主题（如 sepia / midnight）需要先把这些 light override 也变量化；当前不阻塞两种主题切换，只是新主题模板需要复制 + 修改更多硬编码点"
+      ]
+    },
+    {
+      "version": "Release1.7.0",
+      "date": "2026-05-08",
+      "changes": [
+        "新功能 (REFACTOR)：admin 「管理 → 分类」编辑器从「嵌套 UL + 折叠 toggle + 拖拽 reparent」整套换成「chip 多排路径 reveal + inline 编辑面板」模型，对照首页 1.2.5-1.3.0 的 #filter-substack 多排 chip — 顶层 chip 行永久显示，点某 chip 同时进入 selection set + 设为 activeEditId，下方按 selection 路径展开 depth-1/2/3/4 的 chip 行（每行末横向滚动末尾「+ 新建」按钮，弹 1.6.1 的快速创建弹窗，parentId 由 activeEditId / selection 推断；layer-1 行末「+ 新建顶层」对应 parentId=null）；activeEditId 对应的标签在 chip 行下方 inline 编辑面板（label / hidden / parent select / 关联字词 chip / 升顶 / + 子 / 删除）",
+        "新功能：分类管理过滤栏 q 非空时切换为「扁平命中列表」视图（cat-search-results），每条显示完整 path（如「日漫 / 萝莉 / 银发」）+ id；点击 = 自动 reveal 祖先链 + 设 activeEditId + 清空过滤框 + 回到 chip 视图，相当于「按搜索结果跳转到编辑位置」",
+        "数据：catSelection (Set per kind) + catActiveEditId (id per kind) 取代 1.6.2 的 catCollapsedIds；LS key ds124:adminCatSelection + ds124:adminCatActiveEdit；保存分类 (PUT) 后 sanitize 清掉已无效 id；切板块 (1.6.2 sub-tab) 保留 selection / active 各自独立，回到某板块继续上次编辑位置",
+        "删除：1.1.0 的拖拽 reparent / reorder（drag/drop on li + .cat-drop-as-child zone）整套移除 — chip 模型下拖拽语义不直观；改 parent 用编辑面板的 parent select dropdown，同层 reorder 用「A→Z」按钮（保留），manual order 字段的拖拽 UI 留 1.7.x 后续",
+        "删除：「全部折叠」/「全部展开」按钮 — chip-layer 模型下 reveal 由 selection 直接驱动，不再有「per-node 折叠态」的语义；旧 LS key ds124:adminCatCollapsed 不读不写不迁移（数据小、清理无价值）",
+        "删除：cat-add-id / cat-add-label 板块尾部添加输入行 — 完全被 layer-1 行末的「+ 新建顶层」chip-add 按钮 + 弹窗替代；少 1 屏元素",
+        "Why：1.5.x 的多 facet 计划落地后每板块 leaf 数破百，1.6.0-1.6.2 的 4-tab + 「+ 子」弹窗 + tab 隔离没有解决「树形纵向高度」根本问题；用户原话「UI 类似板块主页的标签选择」直接对应首页 chip 多排，复用同款心智模型最低成本；多 parent 同时展开能力（1.2.6 引入）保留，admin 偶用对比同级两个父的子集"
+      ]
+    },
+    {
+      "version": "Release1.6.2",
+      "date": "2026-05-08",
+      "changes": [
+        "修复 (UX)：分类管理 admin 页拆 4 个子 tab — 原本视频 / 音频 / 图片 / 小说四个 .category-editor 顺序堆叠成一个超长滚动列表，用户多 facet × 上百条目时改一个标签要在四 kind 共享的滚动条里翻；新增 .cat-kind-tabs 子 tab 行（视频 / 音频 / 图片 / 小说），同时只渲染一个 kind 的 editor，其它 [hidden]；切 tab 不重渲染（4 个 editor 始终在 DOM，仅切 hidden 属性），catDraft 仍是单一 draft，「保存分类」按钮一次 PUT 全部 4 kind",
+        "调整：分类管理「全部折叠 / 全部展开」按钮范围从「全部 4 个 kind」收紧为「当前 active tab 的 kind」— 原行为在子 tab 化之后违反直觉（用户在视频 tab 看到太长想折叠时不该影响其它 tab）",
+        "数据：active kind 持久化到 localStorage ds124:adminCatActiveKind，下次进 admin 自动回到上次看的板块"
+      ]
+    },
+    {
+      "version": "Release1.6.1",
+      "date": "2026-05-08",
+      "changes": [
+        "修复 (UX)：分类管理「+ 子」按钮改为就地弹窗 — 原本点「+ 子」只把焦点跳到该板块底部的添加输入行（带一个 pendingParent 一次性 flag），多 facet × 数十条标签时每次都得手动滚到板块尾部填 ID/标签名才能完成；新增 #cat-add-child-dialog 弹窗，在原地输入 ID + 标签名并锁定 parentId，提交后 push 到 catDraft 并刷新列表，关联字词留在新增的子标签 chip 输入区现成填",
+        "修复：合集分集列表「同名不同音频格式」重复显示 — 一个合集里同时存放 Track01.mp3 + Track01.wav 时（专辑常见情形），扫描会按文件分别 emit 两条同名 episode；lib/collections.js scanEpisodesRaw 在每个目录的 quality merging 之后加一道音频格式合并：同 stem 且全为音频扩展名时合并为一条 episode，主 file 按 flac > wav > m4a > aac > mp3 > ogg > opus 优先级（同优先级按体积大优先），变体挂到新字段 ep.formats[]（前端目前不展示，留给后续格式切换 UI），字幕侧车按 lang+file 去重合并",
+        "保持：mp3 + mp4 同名（音频 + 视频共享 stem）不合并，独立成两条 episode（不同体验，不属同格式变体）；quality merging（如 Movie-1080p + Movie-720p）行为完全不变"
+      ]
+    },
+    {
+      "version": "Release1.6.0",
+      "date": "2026-05-06",
+      "changes": [
+        "新功能：音频合集支持视频 ep 播放 — AUDIO_EXTS 扩 .mp4/.webm/.m4v；audio-main 双元素方案，纯音频 ep 走原 <audio> + Plyr 链路完全不动，视频 ep 切到独立 <video> 元素显示画面；后端 /audio-files 是 express.static 通用静态托管原本就吃 mp4 + Range，无需改动",
+        "新功能：移动端音频合集视频 ep UI 重构 — 在 .amst-cover-frame 里加 #amst-video，视频 ep 时把 1:1 封面方框解锁、cover 隐藏、video 按真实宽高比展开；JS swapAudioPlayerForEp 用 matchMedia 选 desktop/mobile target；事件 binder 给三个元素都绑（mini-sync / progress-save / amst-sync 都是 idempotent helper + WeakSet 防重）",
+        "新功能：视频 ep 字幕借用 — collections.js scanEpisodesRaw 加 fuzzy stem fallback：视频 ep 自身无 sidecar 时，在合集所有 sidecars 池里按 bareStem 双向子串匹配（最长重合 ≥ 8 字符）取最佳挂上，标记 borrowed/borrowedFrom；典型场景如「全期间特典/通过视频学习.mp4」自动借同合集「音声文件/mp3/【１】通过视频学习.mp3.vtt」；前端歌词面板 + 浮层都跟着走",
+        "新功能：悬浮外挂字幕浮层 #audio-fsub — 仅显示当前句，半透明 pill，desktop 在 audio-controls-row 加 SUB 开关，mobile 在 amst-aux-row 加圆按钮；状态持久化 localStorage；updateLyricHighlight 切句 hook 同步浮层文本",
+        "新功能：浮层可拖动 + 可缩放 + 字号自适应 — pointer events 实现拖动（4px 阈值，tap 不锁定布局）；resize: both + ::-webkit-resizer 视觉 grip；container-type: inline-size + cqi 单位让字号实时跟浮层宽度走（[13, 64]px 上下限）；双击重置回 CSS 居中默认；touch-action: none 修 mobile DevTools 触摸拖拽被浏览器抢走的经典 bug",
+        "调整：desktop 视频 max-height 70vh→60vh + #audio-main 加 overflow-y:auto，确保视频画面不挤掉 controls-row 上的 SUB 控件",
+        "调整：mobile 视频 max-height 60vh→45vh + amst-main-row/aux-row 加 flex-shrink:0，避免视频画面把底部「悬浮」按钮推出视口",
+        "Why：用户的某些音频合集里夹带带画面的曲目（解说视频 / MV），且部分视频本身没字幕，配套的音频文件有字幕需要借用；用户希望字幕外挂浮在屏幕上不干扰画面"
+      ]
+    },
+    {
+      "version": "Release1.5.3",
+      "date": "2026-05-05",
+      "changes": [
+        "调整：移动端首页 toolbar 展开布局压缩 — 原来 flex column 模式让排序 select / 排序方向 / 搜索框 / 高级搜索 / 仅看收藏 / 含隐藏 / 批量管理每个都占整行，展开后吃掉一半以上视口；改为 flex row+wrap，让相关控件共享一行：sort-select + sort-dir-btn 同行（select 占大头）、fav-toggle + show-hidden-toggle 同行（各 ~50%）；filter-chips / filter-op / 批量管理 / 上传仍各占整行",
+        "调整：移动端隐藏 .search-wrap（home toolbar 内的搜索框 + 高级搜索 → 按钮）— 顶部 header 已有 🔍 按钮入口直达高级搜索页，移动端窄屏再放一份完全是冗余；filter-spacer 同步隐藏（桌面 flex-grow shim 在移动端无意义）",
+        "目标：展开后 toolbar 占视口高度 ≤ 30%（用户反馈 1.5.2 之前实测 > 50%）"
+      ]
+    },
+    {
+      "version": "Release1.5.2",
+      "date": "2026-05-05",
+      "changes": [
+        "修复：1.5.0 给 .types-checkbox-list 加 max-height: 50vh + overflow-y: auto 后，chip 列表多于一屏时子级 chip 被滚到视口外，加上 webkit 默认细 scrollbar 几乎看不见，用户体感「选父标签后子标签不再显示」（实际是被裁掉了视口外）；移除 max-height + overflow，让 chip 列表自然撑开。如果未来 chip 真的多到撑过 viewport，需要做 sticky footer 方案而不是给列表加 cap"
+      ]
+    },
+    {
+      "version": "Release1.5.1",
+      "date": "2026-05-05",
+      "changes": [
+        "修复 (CRITICAL)：1.5.0 加的 .dialog { display:flex; flex-direction:column; max-height:85vh } + .dialog form { overflow-y:auto } 在多个浏览器上破坏了 <dialog> 元素的关闭行为 — create/edit/bulk-retag/bulk-authors/cover 五个对话框都会卡在最前方无法关闭，cancel/submit 按钮 click 不响应；回退这一段（包括 form overflow），保留 max-width: min(720px, 92vw) 加宽 + .types-checkbox-list 内 max-height:50vh 自滚，达成「chip 列表自身限高，dialog 不动 layout」的等价效果"
+      ]
+    },
+    {
+      "version": "Release1.5.0",
+      "date": "2026-05-05",
+      "changes": [
+        "修复 (语义)：隐藏=最高优先级 — 1.0.0 时定的「批量管理是 admin 看到隐藏合集的唯一入口」语义被用户判定违背直觉；reloadHome 拼参数时 wantHidden 不再读 state.bulkColMode，仅以 admin-only #show-hidden-input checkbox 为唯一开关；admin 想批量管理隐藏 = 先勾「含隐藏」再进批量",
+        "新功能：编辑 / 创建 / 批量改标签 / 批量改作者四个对话框统一加宽 max-width: min(720px, 92vw)，dialog 加 max-height: 85vh + form 内滚，避免长 chip 列表把按钮顶出视口；.types-checkbox-list 加 max-height:50vh+overflow-y:auto",
+        "新功能：标签 chip 可识别度强化 — 同名子标签的父级路径前缀从 fade（opacity 0.7）升级为 badge（背景+边框+monospace 字体），扫一眼就能区分两个「萝莉」；renderTypesCheckboxList 给有子级的父 chip 末尾追加「(N)」子级数 suffix",
+        "修复：批量改作者 / 公司对话框「模式」radio 错位 — fieldset 用了裸 .field 类导致命中 `.field input { width:100% }` 把 radio 按钮撑成全宽块；改为 .field.field-radio 单独样式（边框 + 三选项 flex column 一行一个 + radio width:auto），并加全局保险 `.field input[type=radio]/[type=checkbox] { width:auto; padding:0; margin:0 }` 避免未来踩同坑",
+        "调整：管理-统计页回退到按 kind 概览 — 1.4.0 加的 byType 标签平铺被用户判太细化；每个 kind 仅 4 cell（COLLECTIONS / HIDDEN / EPISODES（按 unit 切）/ TOTAL SIZE），删除「未分类 (孤立)」cell；SYSTEM 段和 TOP 5 表格保留",
+        "新功能：cover dialog 删图（含批量） — 每个 thumb hover 出现右上 ✕ 单删按钮（admin / perm-delete only）；新增「管理图片」工具栏开关进入批量模式（每张显 ✓ 圆点 overlay + 全选 / 全不选 / 删除选中 / 退出）；走既有 episodes/bulk action=delete 端点；删了 selectedCover 自动回 (自动)；子目录图片的 ✕ 灰色禁用 + tooltip 引导到图集页删（episodes/bulk endpoint 不接受带 / 的 file 名，留待后续扩 server）",
+        "数据规模基线写入 memory（feedback_data_scale_baseline.md）：用户口头基线 5×10×50 是案例非上限，实际应保持设计弹性；当前 ≤1 万节点架构无压力，10 万临界，100 万必上 canvas / 服务端分页",
+        "DS124 硬件底线写入 memory（reference_ds124_hardware_limits.md）：1GB RAM / ARM A55 1.7GHz / 单盘 / 1Gbit；node 进程实可用 ~400-600MB",
+        "多维度标签计划写入 memory（project_facet_tags_plan.md）：先 B（cat 加 facet 字段，flat 不变）后 A（types 拆 4 facet object），保留标签系统但扩 行为 / 属性 / 题材 / 作者 4 facet"
+      ]
+    },
+    {
+      "version": "Release1.4.0",
+      "date": "2026-05-05",
+      "changes": [
+        "新功能：数量代词按 kind 自适配 — countUnit() 加 image='张' / novel='篇'，原本只覆盖 video='集' / audio='首'；search-card-meta 与 admin 重复检查表头（「集数」改为「{unit}数」）跟着切",
+        "新功能：「作者」字段扩展为「作者 / 公司」 — create / edit 对话框 legend + placeholder、详情页 detail-authors、移动端 amst-artist、高级搜索范围 checkbox、ep-sort artist 排序选项 全部统一文案；后端字段名 authors / artist 不动",
+        "新功能：同名子标签父级路径显示 — renderTypesCheckboxList 检测重名 leaf，显示 fade 父级路径前缀「日漫 / 萝莉」消除歧义；卡片 .card-type 用 disambigTypeLabel(kind, id) 同步处理；title 属性永远填完整路径",
+        "新功能：批量管理 chip 筛选保险 — enterBulkColMode / exitBulkColMode 调 applyKindUI + syncChipActiveState，避免 bulk 模式下 chip active 视觉与实际 state.filter.types 失同步",
+        "新功能：批量管理可改作者 / 公司 — bulk-col-bar 加「改作者 / 公司」按钮，弹 bulk-authors-dialog；三模式：追加（合并去重）/ 替换 / 清空；追加模式 GET 每个合集当前 authors 后 PATCH merge",
+        "新功能：图片合集 gallery 多选删除 — view-gallery 加 admin-only / perm-delete 工具栏「管理」开关；进入选择模式后每个 thumb 显 ✓ 圆点 overlay；支持全选 / 全不选 / 按子目录批量选 / 批量删；走既有 episodes/bulk action=delete 端点",
+        "新功能：分类管理 UI 重构 — 顶部加 cat-toolbar：实时过滤输入（按 label / id / 关联字词）+ 全部折叠 / 全部展开按钮；每个有子节点的 li 前置 ▶/▼ 折叠开关，状态按 kind 持久化 localStorage（ds124:adminCatCollapsed）；li.cat-collapsed > .cat-children {display:none}",
+        "新功能：管理统计页按实际 categories 树聚合 — kindBreakdown(kind, digest) 按 clientFlattenTree 渲染所有标签计数（多层缩进 └），不再写死固定 series/movie/audiobook 等；byType 中已不存在的旧 id 累加到「未分类 (孤立)」单元",
+        "新功能：分类配置导入 / 导出 — admin 分类管理 toolbar 加「导出配置」/「导入配置」按钮；导出 JSON envelope { type:'ds124-config', version:1, exportedAt, sections:['categories'], categories:catDraft }；导入支持完整 envelope 或裸 categories map，schema 校验后载入草稿，需点「保存分类」才写入服务器；预留 users / settings 等后续 sections",
+        "数据：catDraft 草稿模型 + 折叠状态 LS（ds124:adminCatCollapsed）+ 过滤 query（不持久）"
+      ]
+    },
+    {
+      "version": "Release1.3.0",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：标签层级从 3 层扩到 5 层 —— lib/categories.js MAX_DEPTH 3→5；前端 ADMIN_MAX_DEPTH 3→5；admin 分类管理的「+ 子」按钮、parent <select>、跨父拖拽深度校验全跟着扩；旧 categories.json 完全向后兼容（全是 top-level，sanitize 不会动）",
+        "新功能：首页筛选 sub-stack 改为通用 N 层渲染 —— REVEAL_LEVELS=4 数组化，自动渲染 row 2..5（depth 1..4 的子集）；选中链上每一层的兄弟都按层独立成排显示，配合自动展开（1.2.8）和路径式 reveal（1.2.7）链路完整",
+        "新功能：激活 tag 置顶条 —— 工具栏顶部新增 #filter-active-tags 行（flex:1 0 100%; order:-1 强制独占第一行），列出所有当前选中的标签含完整路径 label（如「动漫 / 魔法少女 / 智熏酱」），每条带 × 按钮一键移除该标签；空选择时整条隐藏",
+        "CSS：filter-sub-row[data-depth=3/4]、type-chip-cb[data-depth=3/4]、vc-row[data-depth=3/4] 三处缩进规则各加两条，桌面 14/18px 阶梯递增，移动端 8/16/24px 紧凑阶梯；active-tag-chip / active-tag-x 一组样式，桌面/移动响应式齐全"
+      ]
+    },
+    {
+      "version": "Release1.2.9",
+      "date": "2026-05-04",
+      "changes": [
+        "修复 (CRITICAL)：选父级 chip 后子集不显示 / 切换到无子父级后旧子集行不消失 —— filterChips click handler 末尾只调了 syncFilterOpUI + reloadHome，没调 applyKindUI，所以 1.2.8 的「自动展开」逻辑虽然写好了但根本没跑。补一行 applyKindUI() 即可；孙集（sub-chip click）一直调用了 applyKindUI 所以没受影响"
+      ]
+    },
+    {
+      "version": "Release1.2.8",
+      "date": "2026-05-04",
+      "changes": [
+        "修复 (CRITICAL)：排序方向按钮（升序/降序）实际从未生效 —— reloadHome 拼参数时把已经是 final key（'created' / 'created-asc'）的 state.filter.sort 又跑了一次 buildSortKey，生成 'created-asc-asc' 这种无效 key；server 的 SORT_FUNCTIONS 找不到 fallback 回 'created'（DESC）。直接 params.set('sort', state.filter.sort) 即可",
+        "调整：删除 1.2.7 的「展开子集 / 展开孙集」toggle 按钮 —— 改为有内容自动展开。row 2 自动出现条件 = selection 路径的顶层有 depth-1 子；row 3 自动出现条件 = selection 路径的 depth-1 有 depth-2 子。filter-substack-toggle CSS 一并删掉",
+        "调整 (核心)：sub-chip 点击 handler 从 1.2.7「path-aware 替换祖先」改为「op-aware toggle」，跟 top-chip click 对齐 —— 这是「自动展开」与「筛选」冲突的根因和最终解：selection 由 typeOp（OR/AND/NOT/ONLY）决定多选 vs 替换，自动展开纯由 reveal 路径驱动，两者完全独立。OR 模式下点子可同时保留父；ONLY 模式下点子替换全部",
+        "升级清理：applyKindUI 末尾扫掉 .filter-substack-toggle 残留，避免 SW 缓存的 1.2.7 DOM 跟 1.2.8 双 render"
+      ]
+    },
+    {
+      "version": "Release1.2.7",
+      "date": "2026-05-04",
+      "changes": [
+        "修复 (CRITICAL)：1.2.6 的「展开/收起 子集」toggle 实际从未出现 —— 它是 .home-toolbar 的 flex 子元素，被 chips 行挤到不可见位置；改用专门的 #filter-substack 全宽容器（flex: 1 0 100%; order: 99）docked 在工具栏下方，所有 sub 行 + toggle 都装进去",
+        "调整：单一总开关 → 拆为两个独立 toggle —— 「展开子集 ▼」（控制排 2）+「展开孙集 ▼」（控制排 3，嵌套于排 2 内，仅当排 2 已展开且确实有孙集时才出现）；状态分别持久化 ds124:filterRow2Open / ds124:filterRow3Open；默认两排都展开",
+        "调整：排 2/3 内容来源 —— 排 2 = 选中链路顶层的 depth-1 直接子；排 3 = 选中链路 depth-1 的 depth-2 直接子（不再 DFS 整子树合并），更贴合「父级有子集 → 排 2，子集有孙集 → 排 3」的语义",
+        "桌面/移动响应式重做 —— 桌面 chip padding 4-8px、scrollbar 5/4px；移动端断点（≤600px）下 chip 缩到 3-7px、font 9px、toggle 紧凑、scrollbar 3px；filter-substack 容器 gap 桌面 4px、移动 3px",
+        "兼容：升级时若旧 #filter-sub-chips 或 .filter-chips-toggle 残留在 DOM，applyKindUI 末尾自动 remove，避免双 render"
+      ]
+    },
+    {
+      "version": "Release1.2.6",
+      "date": "2026-05-04",
+      "changes": [
+        "调整：标签筛选三排展开整子树而非直接子 —— 选了顶层 chip 即同时填充排 2（其下所有 depth-1 子）和排 3（其下所有 depth-2 子孙），不用手动逐层钻；DFS 收集时按 cat.order/label cmp 排序，多顶层 reveal 时按顶层分组依次叠加",
+        "新功能：三排都横向滚动 —— filter-chips 与 filter-sub-row 改 flex-wrap:nowrap + overflow-x:auto，加细 scrollbar 样式（webkit 5/4px、scrollbar-width:thin、accent-dim 拇指）；移动端长标签条不再换行堆高",
+        "改造：原「chip 数量 > 6 时折叠」按钮（.filter-chips-toggle）改造为「显示/隐藏 子集」开关 —— 仅当排 2/3 有内容时显示，按状态写「展开子集 ▼」/「收起子集 ▲」；偏好持久化到 localStorage ds124:subChipsHidden",
+        "调整：sub-chip 点击 handler 从「替换直属父」改为「path-aware 替换全部祖先」—— 现在排 3 chip 一键直达（清掉 selection 中所有它的祖先 chip 后加自己），不再产生 {top, grandchild} 这种半路状态"
+      ]
+    },
+    {
+      "version": "Release1.2.5",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：首页标签筛选区从「每个被选父独立一行 + 整子孙树 DFS」改为「按 depth 三排」—— 排 1 顶层（永久）、排 2 depth-1、排 3 depth-2，没有内容的排自动隐藏；多选保留，路径式 reveal 让你在深层 chip 选中时往上的层级仍然可见，drilldown 体验更紧凑；style.css 给 depth=2 排加 14px 左缩进 + 加粗左边框"
+      ]
+    },
+    {
+      "version": "Release1.2.4",
+      "date": "2026-05-04",
+      "changes": [
+        "修复：封面对话框「截取当前帧」对转码视频（.mkv/.mov 等走 /media-stream 的格式）实际只能截首段 — cover-frame-video 缺少主播放器那套 seeking 拦截器，拖动进度条无法跨缓冲段；现在复用同一思路，seeking 时改 src 为带 ?t= 的新 stream，并把发给 /capture-frame 的时间改为 streamStartSec + currentTime 的绝对时间，转码视频也能在任意时刻精确截帧",
+        "修复：截帧按钮启用条件从 currentTime > 0 放宽为 ≥ 0（理论上仍极少触发，但首帧不再被禁掉）"
+      ]
+    },
+    {
+      "version": "Release1.2.3",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：网页 favicon — 把 icon/links-icon-9892.png 复制到 public/favicon.png；index.html <head> 加 <link rel=\"icon\" type=\"image/png\" href=\"/favicon.png\"> + <link rel=\"apple-touch-icon\">；浏览器标签页 / 移动端书签图标都生效"
+      ]
+    },
+    {
+      "version": "Release1.2.2",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：高级搜索页加 admin-only「含隐藏」checkbox — 勾上时请求带 includeHidden=1，让被 hidden 标签 taint 过滤掉的合集出现在搜索结果中；URL 参数用 hidden=1（更短、更合用户直觉），调 /api/search 时翻译成 includeHidden=1（服务端契约）；服务端已经做 admin-gating，前端 .admin-only CSS 自动对非 admin 隐藏整行"
+      ]
+    },
+    {
+      "version": "Release1.2.1",
+      "date": "2026-05-04",
+      "changes": [
+        "修复 (CRITICAL)：高级搜索 / 作者补全在非 video 板块下报 404 — 前端 api() 经过 subUrl() 把 /api/search 错误地前缀成 /audio/api/search 等；SHARED_PREFIXES 漏加 /api/search 和 /api/authors，现已加上",
+        "修复：排序方向按钮箭头画崩 — 之前 SVG 是「斜线 + ^」组合不像箭头；改为标准「竖线 + ^/v 箭头头」结构，sort-asc/sort-desc 视觉一致",
+        "修复：home toolbar「高级搜索 →」按钮与搜索 input 重叠错位 — `.search-wrap` 原本是单元素容器（`flex: 0 1 240px` 没设 display:flex），加按钮后子元素挤压；改为 flex 容器，input 1fr + 按钮 fixed，stretch 对齐工具栏其他控件高度（32px）"
+      ]
+    },
+    {
+      "version": "Release1.2.0",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：A 方案 — 顶层父 chip 被选中后下方展开一行 sub-chip 显示该父的全部子孙（DFS 缩进，每一级前加 └ 字符）；点击 sub-chip = 移除父、加入该子（更精细的筛选）；selected={父, 别的子} 时每个父独立一行 sub-chip；移动端样式同步压缩",
+        "新功能：合集作者字段 — 合集 metadata 加 authors:string[]（free text，0..20 个，每条 ≤ 80 字符，NFKC + lowercase 去重）；createCollection / updateCollection / GET /api/collections/:id / listCollections 全链路 surface authors",
+        "新功能：作者自动补全 — GET /api/authors?kind=&kind=all 返回该板块（或全板块）所有合集已用过的作者去重并排序；前端共享 <datalist id=\"authors-datalist\"> 让 <input list=\"authors-datalist\"> 自动弹建议；create/edit dialog 加 chip 输入区 + 自动补全输入框（回车/逗号添加，× 删除，退格删上一个）",
+        "新功能：合集详情页头部新增「作者：xxx, yyy」一行；空作者时整行隐藏",
+        "新功能：标签层级支持搜索 — 标签维度命中包含展开后的祖先标签 label + id；关联字词维度展开后子孙的 keyword 也参与匹配",
+        "新功能：高级搜索独立页 #/search?q=&fields=&kind= — 多关键词空格 AND；可勾选 5 维度（标题/标签/关联字词/作者/简介）；kind 选择器（视频/音频/图片/小说/全部）；URL 状态可分享；header 加搜索按钮入口；home toolbar 搜索框旁加「高级搜索 →」按钮",
+        "新功能：GET /api/search?q=&fields=&kind=&includeHidden= 单端点跨板块跨字段搜索；hits 含 _kind 注解；结果按 createdAt 倒序",
+        "修复：排序方向按钮图标真根因 — SVG 没 width/height 属性、外部也没特定 CSS sizing 规则，浏览器在 inline-flex 容器里把 SVG collapse 到 0；style.css 加 #sort-dir-btn svg { width:14px; height:14px; display:block }；同时给 #home-bulk-btn / #home-audio-upload-btn 内 SVG 加同款保险",
+        "兼容：旧合集 metadata 缺 authors 字段时按 [] 兜底；旧 categories.json 缺 parentId 字段（1.1.0 行为）继续生效"
+      ]
+    },
+    {
+      "version": "Release1.1.1",
+      "date": "2026-05-04",
+      "changes": [
+        "修复：admin 分类管理拖拽中无法滚动页面 — 浏览器原生 HTML5 drag 不会 auto-scroll 文档；新增 window 级 dragover 监听器，光标进入视口顶/底 60px 时按距边缘比例 scrollBy（最高 22px/帧），离开后自动停",
+        "修复：子标签无法重新升回顶层 —— parent <select> 第一项虽是「（顶层）」但管理员经常找不到；每个 depth>0 的 li 加一个显式「↑ 升顶」按钮（一键 parentId=null）"
+      ]
+    },
+    {
+      "version": "Release1.1.0",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：标签层级化（父 → 一级子 → 二级孙，深度上限 3）— categories 数据结构每条目新增 parentId/order 字段；指向不存在 / 自指 / 形成环 / 超深度的节点 sanitize 自动 promote 到顶层 + console.warn",
+        "新功能：lib/categories.js 新增 6 个 helper（getTree / descendantIds / ancestorIds / effectiveHiddenIds / expandGrant / expandUpward / pathLabel），原 hiddenIds/validIds 行为不变向后兼容",
+        "新功能：选父标签 chip 隐式命中所有挂了该父或任意子孙的合集（server.js mountSubsystem 用 expandUpward 把合集 leaf types 展开为 effectiveTypes 后再做 selected 交集）；选子标签仍只命中具体子",
+        "新功能：父标签 hidden=true → 全部子孙也视为 hidden（effectiveHiddenIds 展开后并集），admin 可在 「全部」+ 含隐藏 看到，bulk-manage 仍能旁路",
+        "新功能：用户 visibleCategories grant 父标签 = 隐式 grant 整个子树（expandGrant 仅向下，不上溯：grant 子 ≠ grant 父）",
+        "新功能：关联字词命中父挂父、命中子挂子；同时命中父+子时只保留更具体的子（detectTypesFromTitle 加 dedupKeepSpecific）",
+        "新功能：管理面板分类编辑器改为树形 UL —— 嵌套缩进、父标签下拉选择器、+ 子按钮、cat-drop-as-child 拖拽 zone（拖到「子区域」=改 parentId、拖到同级 li 行=同父排序）；环 / 自身子孙 / 深度超限拖拽自动拒绝",
+        "UI：首页 chip 只渲染顶层（parentId == null）父标签；子标签仅在创建/编辑/批量重打 dialog（按 tree DFS 缩进）+ 详情页头部（pathLabel 完整路径）+ admin 管理面板出现",
+        "UI：admin 用户可见分类 dialog 改为树形 checkbox（缩进显示），父子独立勾选不联动；提示「勾父=运行时展开整个子树」",
+        "UI：重复检查 tab 类型列改用 pathLabel 显示完整路径「魔法少女 / 叛逆」",
+        "兼容：旧 categories.json（无 parentId 字段）启动时全部当顶层，UI 视觉无差；旧合集 meta.types[] 仍是 leaf id 数组，无需迁移",
+        "数据：data/categories.json 写回时每条目都有 parentId 字段（缺失补 null）"
+      ]
+    },
+    {
+      "version": "Release1.0.1",
+      "date": "2026-05-04",
+      "changes": [
+        "修复 (CRITICAL)：从重复检查 tab 点「编辑」会把改动写到 state.currentCollection 指向的「上一个浏览过的合集」上而不是被点击的合集 — openEditDialog 不设 state.currentCollection，提交时却读它生成 PATCH URL；现在进 dialog 第一行就同步 state.currentCollection = collection",
+        "修复：白名单 add() 并发同一对会写两条 — 去重检查在 withLock 之前发生，两个并发 POST 都看到「不在集合」，都 push；改为 withLock 内部重检",
+        "修复：嫌疑模式短标题误聚成超级大组 — Levenshtein cap=2 没有最小长度门槛，「EP1/EP2/S1/S2」「v1/v2」全聚一起；改为 minLen ≥ 4 才进 near-miss 分支，且 cap = min(2, max(1, floor(minLen/3)))，4 字符要求精确，6 字符 cap=2",
+        "修复：新建合集对话框监听器泄漏 — 每次 open 都 listEl.addEventListener 但从不 remove，长会话内存涨；改为可移除的 ref + dialog close 事件统一 teardown",
+        "修复：搜索栏切换排序方向按钮图标消失 — updateSortDirUI 把 data-icon 写在 button 自己身上，而 injectIcons 的 querySelectorAll 不包含 scope；首次点击连内层 span 一并被覆盖成裸 SVG，后续点击没有 data-icon 元素可命中；改为 sortDirBtn.innerHTML 重写内层 span 结构",
+        "新功能：admin 搜索时可勾选「含隐藏」— 搜索栏旁加 admin-only checkbox，勾上时 /api/collections 请求带 includeHidden=1，让被 hidden 标签 taint 过滤掉的合集回到结果中；状态持久化 ds124:includeHidden",
+        "新功能：编辑合集对话框新增「按关联字词识别」按钮 — 不自动跑（避免覆盖管理员历史选择），用户点击后才按当前标题命中关联字词，未勾选的命中标签自动追加并标记 type-chip-auto"
+      ]
+    },
+    {
+      "version": "Release1.0.0",
+      "date": "2026-05-04",
+      "changes": [
+        "里程碑：Alpha 阶段结束，正式发布 Release 1.0.0（用户授权 MAJOR 跃迁，从 AlphaV1.71.x 直入 Release1.0.0）",
+        "新功能：重复检查白名单 — 每个嫌疑组每行加 checkbox，顶部「标为非重复（需选 2 项）」按钮在选中两个时启用，点击把这一对存入白名单（按 kind 分桶，按 id 升序去方向），下次扫描自动跳过该 edge；若组内剩余 edge 不足以维持 ≥ 2 成员，组自动消失",
+        "新功能：白名单管理 dialog — 顶部「查看白名单」按钮弹 dialog，列出当前板块全部白名单对（含合集标题；合集已删除时显示「已不存在」灰字），逐对「解除」按钮，解除后立即重跑扫描",
+        "改进：关联字词大小写/全半角不敏感 — detectTypesFromTitle 与 sanitizeKeywords 两边都先 NFKC 归一化再 lowercase，「Ｍａｄｏｋａ」/「MADOKA」/「madoka」全部能匹配；输入框去重也走同一规则；分类管理 UI 标签文案点明",
+        "数据：data/duplicate-whitelist.json 新文件，结构 { video: [[a,b],...], audio:[...], image:[...], novel:[...] }，原子写、去重、按 id 升序",
+        "API：新增 GET/POST/DELETE /api/admin/duplicates/whitelist；scan 端点内部通过 dupWhitelist.keySet(kind) 在 union-find 之前过滤 edge"
+      ]
+    },
+    {
+      "version": "AlphaV1.70.88",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：管理面板新增「重复检查」tab — 板块四选一（视频/音频/图片/小说），双模式：嫌疑模式（标题归一化后等同 / Levenshtein 距离 ≤ 2）和相似度模式（字符 bigram Jaccard，可调阈值 50-95%，默认 70%）；按 union-find 把跨阈值传递的合集合并到同一组；每行支持快捷编辑（弹合集编辑对话框）/ 跳转到详情 / 删除（带确认）",
+        "新功能：智能分类 — 分类管理中每个标签新增「关联字词」chip 输入（回车/逗号添加，× 删除，退格在空输入下删最后一项）；新建合集对话框监听标题输入（debounce 200ms），按当前板块分类的关联字词做大小写不敏感子串匹配，命中标签自动勾选并加「• 自动」标记；用户手动改动过的 chip 不再被自动覆盖",
+        "数据：data/categories.json 每个分类新增 keywords 数组字段（旧数据缺失时按空数组兜底，向后兼容）",
+        "API：新增 GET /api/admin/duplicates?kind=&mode=&threshold= ，返回 { groups: [{ topScore, collections: [{id,title,types,episodeCount,totalSize,hidden}] }] }",
+        "修复：标签级合集隐藏对 admin 失效 — admin 在「全部」视图里仍能看到隐藏标签下的合集，违背了「隐藏即隐藏」的语义；server.js 的 dirtyTypes 计算原本被 `if (role !== 'admin')` 跳过，改为 `if (!includeHidden)`，使 admin 也参与 taint 检查；admin 点击隐藏 chip 时 dirtyTypes 与 selected 命中即解锁可见，bulk-manage 模式（includeHidden=1）仍是唯一 escape hatch",
+        "前端：duplicates 面板使用 kindFetch() 显式带 kind 前缀，跨板块的编辑/删除不再依赖当前 state.kind"
+      ]
+    },
+    {
+      "version": "AlphaV1.69.87",
+      "date": "2026-05-04",
+      "changes": [
+        "修复：歌词手动滚动后 4s 闲置不会自动滚回当前行 — 旧版 updateLyricHighlight 在 idx 未变时 early-return，于是用户滚走后只要当前行不变就永远不滚回；改为「indexChanged + 行偏离中心>15% 面板高 + 锁定已过期」三条件复合判断，激活行偏离视口中心超过 15% 时强制 smooth-scroll 回中心",
+        "笔记：SSL/HTTPS 升级用户决定暂缓，本版未动 nginx 配置"
+      ]
+    },
+    {
+      "version": "AlphaV1.69.86",
+      "date": "2026-05-04",
+      "changes": [
+        "修复：移动端歌词 sheet 关闭按钮无法点 — 关闭按钮原本被 #amst-lyric-mask（z-index:9000）的 stacking context 困住，被 .amst-lyric-active 的歌词面板（z-index:9012）盖住；改为 #amst-lyric-mask 兄弟节点 + position:fixed + z-index:9100，并用 hidden 属性同步显隐",
+        "修复：长标题（如「自己肯定感爆上げ↑↑しゅきしゅきソング」）导致播放页水平拉伸 — flex column 子元素 min-width:auto 默认等于 min-content；white-space:nowrap 让 min-content = 整段文本宽度；给 .amst / .amst-titles / .amst-title / .amst-artist / .amst-collection 全部加 min-width:0 + max-width:100%，并在 #audio-main / #view-audio-player 上加 overflow-x:hidden 兜底"
+      ]
+    },
+    {
+      "version": "AlphaV1.69.85",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：移动端音频播放器重做（参考 Spotify / Apple Music / 网易云 / QQ 音乐）— 在 #audio-main 内新增 #audio-mobile-stage，包含大封面（70vmin 方形）、三行标题（曲名/作者/合集）、自绘 progress slider（CSS 控制 fill 渐变）、5 联主控（随机/上一/播放64px圆/下一/循环）、4 联辅助（喜欢/定时/歌词/队列）",
+        "新功能：歌词全屏 sheet — 复用既有 #audio-lyric-panel，加 .amst-lyric-active 类切换为 fixed 全屏覆盖；背景由 #amst-lyric-mask 提供模糊封面层（blur(40px) + 0.35 brightness）+ 黑色渐变 tint",
+        "新功能：队列 bottom sheet — 复用既有 #audio-sidebar，加 .amst-sheet-active 切换为 fixed bottom 60vh，slideUp 动画，::before 拖柄；点 backdrop 或选曲后自动收起",
+        "实现细节：手机端 hide 桌面 hero / Plyr / 控件行 / 侧栏；自定义 progress 用原生 input[type=range] 监听 audio 元素 timeupdate / loadedmetadata / durationchange；Loop 按钮 3 态循环（off→单曲→列表→off），通过 dispatchEvent 转发到既有 audioLoopBtn / audioLoopAllBtn checkbox；syncAmstControls() 由 updateLoopShuffleUI / loadAudioTrack / updateSleepLabel 调用保持状态镜像",
+        "笔记：本次仅本地修改未部署"
+      ]
+    },
+    {
+      "version": "AlphaV1.68.84",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：移动端布局重做 — 头部强制单行（h1 隐藏，user-pill 折成 icon-only，flex-wrap:nowrap）；home-toolbar 折叠到一条 ~44px 高的「筛选状态」摘要 pill，点 pill 展开（.home-toolbar.expanded）后才显示完整 chips/op/sort/search/fav/admin 列；摘要文本由 updateToolbarSummary() 在 reloadHome 里实时合成（标签 + 操作符 + 搜索词 + 收藏过滤）",
+        "结构：默认 .toolbar-mobile-bar 在桌面隐藏；@media (max-width:600px) 才显示并通过 :not(.expanded) > *:not(.toolbar-mobile-bar) {display:none} 收起其他内容；展开切回 column 布局复用既有移动样式",
+        "笔记：本次仅本地修改未部署"
+      ]
+    },
+    {
+      "version": "AlphaV1.67.83",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：细化用户权限系统 — 用户对象新增 permissions: { upload, create, modify, delete }，admin 角色全部自动通过；新用户默认全 false；admin 用户列表新增「权限」按钮 + 弹框 toggle；POST /api/admin/users/:u/permissions 端点保存",
+        "新功能：lib/auth.js 加 requirePerm(name) middleware，server.js 把所有原 requireAdmin 的内容操作路由换成对应权限 — POST .../upload→upload；POST /api/collections→create；PATCH /api/collections/:id + capture-frame + preview-frames + extract-cover + scan-meta→modify；DELETE collection + clear + episode CRUD + reorder + bulk→delete",
+        "新功能：前端 .perm-upload / .perm-create / .perm-modify / .perm-delete CSS 类按 :root[data-perm-X] 自动显隐；canPerm(name) 工具函数；act-cover / act-edit / act-upload / act-intro / act-manage / act-delete / home-audio-upload-btn / 「+」新合集卡片按对应权限显示",
+        "改进：标签筛选操作符 NOR → ONLY — 单选模式：点 chip 替换整个选择，再点同一个就取消；切到 ONLY 时若已多选则保留最后一个；服务器同时接受 ONLY 和遗留 NOR（旧 URL 不破）；localStorage 中的 NOR 自动迁移成 OR",
+        "笔记：bulk-manage 触发按钮（home-bulk-btn）依然只有 admin 可见 — 它一次涵盖删除+改标签两类高危操作，不细化；用户级编辑请走单合集详情页的工具栏"
+      ]
+    },
+    {
+      "version": "AlphaV1.66.82",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：小说阅读器 PDF 支持 — vendored pdf.js 4.10.38（lazy load via dynamic import，cmaps + standard_fonts 同包，~3.8MB 部署一次性，首次进 PDF 才下载），按页渲染到 canvas 栈；CJK PDF 走 cmaps 字形回退",
+        "复用：阅读器 prev/next/字号/进度记录全部跟 .txt 共享一套；状态行「渲染第 N/总页 页…」实时反馈"
+      ]
+    },
+    {
+      "version": "AlphaV1.65.81",
+      "date": "2026-05-04",
+      "changes": [
+        "新功能：小说阅读器 v1（仅 .txt）— 新增 #view-novel-reader 视图，支持 UTF-8 / GB18030 / UTF-16 编码自动嗅探，段落 / 缩进 / 换行保留，A−/A+ 字号调节（12-32px，localStorage ds124:novelFont 持久化），上一篇 / 下一篇翻章，阅读进度按 scrollTop/scrollHeight 比例计算并复用 /<kind>/api/progress 端点（>=95% 滚动自动 watched）",
+        "改进：handleRoute novel 分支从「toast 开发中」stub 替换为 await showNovelReader(id, file)；hideAllViews 同时调 novelReaderTeardown 清理 scroll / visibility / beforeunload 监听",
+        "笔记：PDF 阅读器（用 vendored pdf.js）下个版本上线，本版进入 .pdf 文件会显示「PDF 阅读器开发中」+ 直链下载 stub",
+        "数据：/volume1/Novel 重组完成 — 121 个 .txt 散文件按标题拆为 5 个系列合集 + 110 个独立合集 + 1 个 PDF 合集（娘娘腔指南），共 116 个 novel 合集；文件夹名清理掉 ?！♠ #& 与尾随 _ / 全角空格"
+      ]
+    },
+    {
+      "version": "AlphaV1.64.80",
+      "date": "2026-05-04",
+      "changes": [
+        "迁移：小说板块存储路径从 Resource/novel 改到 /volume1/Novel（NAS 实际路径首字母大写，已建好空文件夹）",
+        "改进：.home-toolbar 改 position:sticky;top:0 — 滚到任意位置都能看到筛选/排序/搜索/「批量管理」触发按钮，不用回滚到顶部",
+        "笔记：图片板块「全部回到未分类」不是 bug 也不是 reset — /volume1/Manga 的 822 个 .collection.json 中 576 个 type='other'（标签 label 是「未分类」），这是磁盘上的既有数据状态，不由今天的代码改动产生。要正确分类需要进入图片合集逐个或批量改标签"
+      ]
+    },
+    {
+      "version": "AlphaV1.64.79",
+      "date": "2026-05-04",
+      "changes": [
+        "迁移：图片板块存储路径从 /volume1/photo 改到 /volume1/Manga（NAS 实际路径首字母大写）",
+        "性能：前端静态资源加缓存头 — / 与 /index.html 由 server 路由托管做版本注入并发 no-cache（让 ETag 304 生效）；app.js / style.css 走 ?v=<版本> + 30d immutable；vendor/plyr/* 同等长缓存",
+        "性能：nginx 反代加 gzip（comp_level 6, min_length 1024B, 覆盖 js/css/json/svg）— 308KB 的 app.js 网络层降到 ~80KB",
+        "新功能：Plyr 懒加载 — 不再首屏注入 plyr.css/plyr.min.js（合计 ~146KB），改由 loadPlyrAssets() 在进入视频/音频前/setKind 切到媒体子系统时按需注入；image / novel 整段会话不下载 Plyr",
+        "新功能：分类清单 stale-while-revalidate — boot 先用 localStorage 里的 ds124:categories:v1 做首屏渲染，再发 GET /api/categories 异步刷新并落盘；首屏渲染等待时间从「1×网络往返」降到「0」",
+        "新功能：Service Worker（public/sw.js）— 静态壳子 cache-first（含按 ?v= 自动清理旧版本），index.html network-first 回退缓存；API/媒体流不拦截。/sw.js 由专门路由发 no-cache + Service-Worker-Allowed: /",
+        "改进：批量管理工具栏从底部移到顶部（fixed top:18px，手机端 top:6px）— 合集多时不再需要滚到底操作",
+        "顺手清理：删除 .bulk-col-bar 显示时挤压 #audio-mini-player 的 has() 选择器（不再底部冲突）"
+      ]
+    },
+    {
+      "version": "AlphaV1.63.78",
+      "date": "2026-05-01",
+      "changes": [
+        "新功能：第四个子系统「小说」骨架 — Resource/novel + /novel/api/* + /novel-files 静态托管 + 合集 CRUD/上传/删除全通；接受 .txt 和 .pdf；阅读器/PDF 查看器/EPUB 后续上线",
+        "新功能：批量管理改造 — bar 加「全选」「全不选」按钮；改标签从 prompt 升级为 chip 多选 dialog（PATCH types[]）",
+        "修复：隐藏标签可见性收紧 — 合集只要含任一隐藏标签就属于「污染」，「全部」视图全员隐藏（含 admin），筛某非污染 chip 时也隐藏；用户主动 chip-select 一个隐藏 chip 才解锁；直连 GET 仅靠 c.hidden 限制，让 chip-unlock 解锁后能点进",
+        "修复：sanitizeVisibleCategories 写死 {video,audio} 漏 image — 改为按 config.CATEGORY_DEFAULTS 动态展开，新增 KIND 自动获得空白白名单；旧 user 记录加载时按 KIND 集合补字段",
+        "修复：state.kind LS 校验只接受 video/audio，漏 image — 改为接受 video/audio/image/novel",
+        "修复：admin 分类管理、可见分类对话框、统计面板、健康检查全部改为按 KIND 集合动态遍历，移除 ['video','audio','image'] 硬编码，避免下次加 KIND 又漏一处"
+      ]
+    },
+    {
+      "version": "AlphaV1.62.75",
+      "date": "2026-04-30",
+      "changes": [
+        "修复：字幕/歌词文件命名为 <完整媒体文件名>.vtt（如 track.mp3.vtt）时不被识别 — scanSidecars 在剥 lang 后再剥一层媒体扩展，匹配回 episode 的 bareStem"
+      ]
+    },
+    {
+      "version": "AlphaV1.62.74",
+      "date": "2026-04-30",
+      "changes": [
+        "新功能：合集多标签 — 单个合集支持挂多个分类标签，编辑/创建对话框改为多选 chip，第一个为主标签",
+        "新功能：标签筛选叠加 — chip 改为多选切换，新增 OR/AND/NOT/NOR 四种逻辑组合开关，URL 用 ?types=&op= 持久化",
+        "修复：VTT 字幕识别失败 — GBK/缺 WEBVTT 头/带 BOM 的字幕走 fetch+TextDecoder 嗅探（utf-8→gb18030→utf-16），统一转 blob 喂给 <track>",
+        "修复：自动小窗开关拆分音频/视频 — 菜单一变二，独立 LS key（ds124:autoVideoMini / ds124:autoAudioMini），旧 ds124:autoMini 自动迁移"
+      ]
+    },
+    {
+      "version": "AlphaV1.61.72",
+      "date": "2026-04-29",
+      "changes": [
+        "性能：合集列表内存缓存 — listCollections 结果按文件夹 mtime 缓存，命中时跳过全量文件扫描",
+        "性能：图片静态文件加 HTTP 缓存头（max-age=7d, immutable），浏览器缓存后零网络请求",
+        "性能：按需缩略图生成 — 新增 /image-thumbs/ 路由，首次请求时 ffmpeg 生成 400px 宽 JPEG 缓存到 .thumbs/ 目录，首页/画廊/喜欢列表均使用缩略图",
+        "性能：合集列表 API 支持分页（?limit=N&offset=M），返回 total 字段"
+      ]
+    },
+    {
+      "version": "AlphaV1.61.68",
+      "date": "2026-04-29",
+      "changes": [
+        "视频截帧封面改为内嵌播放器：封面对话框内直接播放视频，暂停后截取当前帧",
+        "修复：移动端竖屏视频/音频播放器布局 — 隐藏 Plyr 音量滑块（手机用硬件音量），进度条获得全部空间不再溢出",
+        "音频内嵌封面提取：封面对话框新增「从音频提取」按钮，自动检测含内嵌封面的音频文件，选择一个提取为合集封面图片",
+        "修复：移动端音频进度条溢出屏幕 — Plyr 播放器加 overflow:hidden + max-width:100% 限制",
+        "修复：标签过多时改为可展开次级菜单 — 超过6个标签时默认折叠一行，点击「展开/收起」按钮切换",
+        "修复：灯箱自动播放滑块无法操作 — 工具栏加 z-index:10，触摸滑动仅监听 stage 区域",
+        "修复：音频「播放全部」未剔除隐藏标签合集",
+        "全系统移动端适配 + 灯箱触摸滑动翻页"
+      ]
+    },
+    {
+      "version": "AlphaV1.57.58",
+      "date": "2026-04-29",
+      "changes": [
+        "修复：图片合集详情页缩略图网格升级 — 分批渲染(60/批) + IntersectionObserver 懒加载 + 点击直接打开灯箱",
+        "修复：图片「我喜欢」返回导航 — 虚拟合集(__liked_images__等)返回直接回主页，不再报合集不存在",
+        "修复：ALL 列表循环尾首衔接 — 切换播放模式时实时更新上/下一集按钮的禁用状态",
+        "修复：隐藏标签下的内容在「我喜欢」列表中默认不显示（后端返回 _type 字段用于前端过滤）",
+        "我喜欢隐藏过滤开关：音频和图片的「我喜欢」列表新增默认关闭的「隐藏」开关，控制是否显示父合集标签为隐藏的内容"
+      ]
+    },
+    {
+      "version": "AlphaV1.56.54",
+      "date": "2026-04-29",
+      "changes": [
+        "修复：Gallery 返回导航异常 — detail page 在 image 模式下渲染缩略图网格替代 episode list，加 #view-gallery 布局样式",
+        "修复：图片分类新增/保存报错 — categories.js 的 sanitize/get/replace 改为动态遍历所有 KINDS（从 SEED keys 推导），不再硬编码 video/audio",
+        "修复：admin 统计面板加入图片板块数据（合集数、图片数、总大小、分类分布）",
+        "图片收藏列表展示：image 首页新增「我喜欢的图片」板块，缩略图网格展示已收藏图片，可直接点击进入灯箱浏览",
+        "detail page 图片模式：合集详情页在 image 模式下以缩略图网格展示，隐藏排序栏"
+      ]
+    },
+    {
+      "version": "AlphaV1.54.51",
+      "date": "2026-04-29",
+      "changes": [
+        "修复：灯箱关闭时正确清理状态和图片资源，hideAllViews 同步关闭灯箱",
+        "修复：切换到图片模式不再中断视频/音频小窗播放，可边看图边听歌/看视频",
+        "灯箱自动翻页：AUTO 开关 + 间隔选择（2s~30s），间隔保存到 localStorage",
+        "大图集性能优化：分批渲染（每批60张）+ IntersectionObserver 懒加载 + 滚动加载更多",
+        "灯箱点击翻页：点击图片左侧35%区域向前翻，右侧35%区域向后翻",
+        "图片收藏：单张图片级别的收藏，灯箱工具栏加♡开关，后端 image-likes API",
+        "图片分类：管理员可管理图片分类标签，前端过滤 chips 完整支持图片子系统",
+        "首页我喜欢曲目列表：▼按钮展开/收起喜欢的曲目清单，点击直接播放",
+        "首页全部播放曲目列表：▼按钮展开/收起所有音频曲目清单，按需加载"
+      ]
+    },
+    {
+      "version": "AlphaV1.47.49",
+      "date": "2026-04-29",
+      "changes": [
+        "修复：桌面模式音量快捷键步进改为±10%，并在播放器上显示半透明音量OSD",
+        "修复：通过文件夹结构进入播放时，播放列表现在正确限定为同级目录文件",
+        "修复：LRC歌词文件的 stem 匹配，修正含中文字符文件名被误判为 lang tag 的问题",
+        "合集内部集数排序：支持按文件名/标题/track number/作者/文件时间排序，每个合集独立保存偏好，详情页和播放器侧边栏均可操作",
+        "播放模式改造：LOOP/ALL/SHUF 按钮改为可勾选的 switch 开关样式",
+        "音频模式「播放全部」：首页新增全部音频板块，一键播放或随机播放所有未隐藏合集的音频",
+        "音频模式「我喜欢」：单曲级别的收藏系统，播放器内可逐曲标记喜欢，合集详情页可批量加入/移出，首页可播放喜欢列表",
+        "图片子系统上线：新增第三子系统「图片」，独立合集管理，缩略图网格浏览，全屏灯箱幻灯片，键盘左右翻页"
+      ]
+    },
+    {
+      "version": "AlphaV1.42.46",
+      "date": "2026-04-13",
+      "changes": [
+        "统一版本号管理：新增 version.json 作为单一版本来源，server.js / build-installer.bat / ChiralNetworkChannel.iss 全部从此文件读取，不再各自硬编码",
+        "MINOR 位改为功能计数（当前 42 项功能），PATCH 位固定为 46 作为基准标记",
+        "build-installer.bat 通过 PowerShell 读取 version.json，并将版本号以 /D 参数传给 iscc，消除 .iss 内硬编码"
+      ]
+    },
+    {
+      "version": "AlphaV1.2.0",
+      "date": "2026-04-12",
+      "changes": [
+        "视频双子系统架构稳定：视频 + 音频子系统共享用户账号体系",
+        "ffmpeg 实时转码集成（win-x64 / linux-arm64），支持 mkv/avi/mov 等非原生格式",
+        "音频子系统上线：歌词同步（lrc/vtt/srt/ass/ssa/txt）、专辑封面（ID3 内嵌优先）、循环模式、睡眠定时、底栏 mini 播放器",
+        "视频小窗播放器：可拖拽、可调大小、小窗内换集、展开回全屏不中断播放",
+        "分类管理：增删改、拖拽排序、按用户控制可见性",
+        "合集子目录递归扫描（最深 4 层），嵌套集数只读可播",
+        "管理员统计面板与健康检查页",
+        "多质量源切换（Plyr 控制栏内 quality menu）",
+        "跳片头按钮（introSkipSec 配置）",
+        "画中画（PiP）与自定义小窗互斥",
+        "移动端响应式布局（≤600px 两列，≤380px 单列）",
+        "搜索、收藏过滤、排序（时间/字母/随机）",
+        "Windows 安装包（Inno Setup，含 node.exe 捆绑，per-user 无需 UAC）"
+      ]
+    },
+    {
+      "version": "AlphaV1.1.0",
+      "date": "2026-04-11",
+      "changes": [
+        "Windows 安装包首版（Inno Setup + 捆绑 node.exe）",
+        "NAS 部署通过 nginx 反向代理，端口 80 无端口号访问",
+        "用户系统：注册/登录/会话/权限分级（管理员/普通用户）",
+        "视频合集管理：上传、删除、拖拽排序、批量删除",
+        "进度续播：按用户保存，跨设备同步",
+        "字幕支持（.vtt/.srt 自动关联同名视频文件）",
+        "评论系统（管理员可删除任意评论）",
+        "收藏与播放历史",
+        "基础分类标签系统"
+      ]
+    }
+  ]
+}

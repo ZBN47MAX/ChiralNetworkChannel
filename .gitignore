@@ -1,0 +1,41 @@
+# ============================================================
+# 仅上传纯净源码 + icon。
+# 用户 clone 后看 README 装好 Node.js / npm install / ffmpeg
+# 即可开箱运行。其余一切本地资源、运行时数据、能重建的产物
+# 都不进 git。
+# ============================================================
+
+# Claude
+.claude/
+
+# 文档:全部 .md 都不传,只保留根 README.md / README/ / CustomTemplate/ 教程
+*.md
+!README.md
+!README/*.md
+!README/**/*.md
+!CustomTemplate/**/*.md
+
+# 开发日志 / 中文文档目录
+DevLog/
+问题资料/
+资源文件管理/
+
+# 运行时日志
+server.log
+server.err
+
+# 运行时数据(用户账号明文密码、会话、进度、HLS/字幕缓存)
+data/
+
+# 本地资源(媒体、音频、图片、小说) —— 全部不传
+Resource/
+
+# npm 依赖:clone 后跑 npm install 重建
+node_modules/
+
+# 便携二进制:用户按 README 自行安装系统级 Node.js + ffmpeg
+bin/
+runtime/
+
+# 打包流程整体不公开:产物 + 暂存 + 脚本配方都不传
+WinBuild/
