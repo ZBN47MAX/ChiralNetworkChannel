@@ -415,14 +415,20 @@ echo.
 echo ============================================================
 echo.
 
-REM ---- Prompt 2: open browser (no longer automatic) ----------------
+REM ---- Prompt 2: open browser (opt-in, DEFERRED to window close) ----
 REM
 REM User asked for this to be opt-in: some workflows want the
 REM service running headless (e.g. just to share to phones) without
 REM the launcher hijacking focus to open a browser tab.
+REM
+REM Choosing Y here does NOT open the browser immediately -- it only
+REM arms OPEN_BROWSER. The actual `start` happens in :final, AFTER the
+REM user presses the key that closes this window. That ordering means
+REM the browser is the last window to appear and grabs focus, so the
+REM user never has to alt-tab back to the launcher just to close it.
 :browser_prompt
 set "BR_ANS="
-set /p "BR_ANS=Open the player in your default browser now? Type Y or N then Enter: "
+set /p "BR_ANS=Open the player when this launcher closes? Type Y or N then Enter: "
 if /i "%BR_ANS%"=="Y" goto browser_open
 if /i "%BR_ANS%"=="N" goto browser_skip
 echo.
@@ -432,9 +438,8 @@ goto browser_prompt
 
 :browser_open
 echo.
-call :log "opening %LOCAL_URL%"
-start "" "%LOCAL_URL%"
-echo [Done] Browser launch requested for %LOCAL_URL%.
+set "OPEN_BROWSER=1"
+echo [OK] The player will open in your browser when you close this window.
 goto final
 
 :browser_skip
@@ -451,8 +456,16 @@ echo   Closing THIS window does NOT stop the service.
 echo   To stop the service, run shutDown.bat.
 echo ============================================================
 echo.
-echo Press any key to close this window . . .
+REM If the user opted in, the browser opens AFTER this keypress and just
+REM before the window closes, so it ends up on top with focus. Single-line
+REM `if defined` (no paren block) sidesteps the literal-')' batch gotcha
+REM noted at the top of this script. The `start` MUST precede endlocal --
+REM endlocal discards OPEN_BROWSER / LOCAL_URL.
+if defined OPEN_BROWSER echo Press any key to close this window and open the player . . .
+if not defined OPEN_BROWSER echo Press any key to close this window . . .
 pause >nul
+if defined OPEN_BROWSER call :log "opening %LOCAL_URL%"
+if defined OPEN_BROWSER start "" "%LOCAL_URL%"
 endlocal
 exit /b 0
 

@@ -51,6 +51,82 @@ module.exports = {
     ? path.resolve(process.env.DATA_ROOT)
     : path.join(__dirname, 'data'),
 
+  // ---- HiFi audio cover cache (v1.9.0+) -----------------------------
+  // Embedded album-art images extracted from audio files by lib/audio.js
+  // land here as JPEG/PNG. Filename is sha1(collectionId|file)+ext so the
+  // path is content-addressable per collection without leaking the actual
+  // file name. Bounded by AUDIO_COVER_LRU_BYTES (LRU eviction in the same
+  // 30 s tick that runs the probe queue, see server.js tickProbeQueue).
+  //
+  // Kept inside DATA_ROOT so the directory is part of the regular backup
+  // surface; users moving the data root pick this up automatically.
+  AUDIO_COVER_CACHE_DIR: process.env.AUDIO_COVER_CACHE_DIR
+    ? path.resolve(process.env.AUDIO_COVER_CACHE_DIR)
+    : path.join(
+        process.env.DATA_ROOT
+          ? path.resolve(process.env.DATA_ROOT)
+          : path.join(__dirname, 'data'),
+        'audio-covers'
+      ),
+  // 200 MiB ceiling. At ~80 KB average JPEG cover that's ~2500 distinct
+  // tracks worth of covers cached on disk; well above the size of a
+  // typical home library and small enough to fit on every storage tier.
+  AUDIO_COVER_LRU_BYTES: Number(process.env.AUDIO_COVER_LRU_BYTES) || 200 * 1024 * 1024,
+
+  // ---- HiFi media-info probe queue (v1.9.0+) -------------------------
+  // server.js tickProbeQueue runs every PROBE_TICK_MS to walk one un-probed
+  // episode per tick and populate episodeMeta[file].mediaInfo via
+  // lib/probe-cache.js. Tied to the same tier check (full / throttle / wait)
+  // as the HLS queue so a busy device deprioritises probes automatically.
+  //
+  // Default 30 s strikes a balance: fast enough that a 10 000-episode cold
+  // library is fully indexed in roughly 80 minutes of background work,
+  // slow enough that a single probe failure does not retry-storm.
+  PROBE_TICK_MS: Number(process.env.PROBE_TICK_MS) || 30 * 1000,
+
+  // ---- fragmented MP4 streaming (v1.9.0+) ----------------------------
+  // Frame-level fragmentation for the MSE-fed video stream. 1 second
+  // fragments keep MSE buffer churn low (~1 appendBuffer call per second)
+  // while still keeping seek granularity tight enough that a scrub from
+  // 00:00 to 1h20m feels instant after the server-side restart kicks in.
+  // Below ~500 ms the fmp4 header overhead becomes a measurable share of
+  // bandwidth; above ~2 s the MSE buffer pump starts feeling sluggish.
+  //
+  // Microseconds because that's the unit ffmpeg's -frag_duration accepts.
+  FMP4_FRAG_DURATION_US: Number(process.env.FMP4_FRAG_DURATION_US) || 1000000,
+  // Persistent cache root for fully-rendered fmp4 outputs. Shares the
+  // same parent directory as the legacy HLS cache so old HLS segments
+  // (still consumed by iOS Safari fallback) and new fmp4 single-file
+  // outputs cohabit without a migration step. The sha1-keyed sub-dir
+  // can contain either layout — readers detect ENDLIST in playlist.m3u8
+  // for HLS or the presence of output.mp4 for fmp4.
+  FMP4_CACHE_DIR: process.env.FMP4_CACHE_DIR
+    ? path.resolve(process.env.FMP4_CACHE_DIR)
+    : path.join(
+        process.env.DATA_ROOT
+          ? path.resolve(process.env.DATA_ROOT)
+          : path.join(__dirname, 'data'),
+        'hls-cache'
+      ),
+
+  // ---- HiFi audio downmix policy (v1.9.0+) ---------------------------
+  // Default behavior for multi-channel (5.1 / 7.1) lossless audio sources
+  // served via /audio-stream. The admin can override via /data/admin-prefs.json.
+  //
+  //   'preserve'  Keep channel count from source. 5.1 source → 6-channel
+  //               output. Best HiFi experience on home theater receivers
+  //               and headphones that simulate surround.
+  //   'dplii'     Encode a Dolby Pro Logic II stereo matrix so a receiver
+  //               can re-extract the surround layout. Compatible with
+  //               stereo-only devices.
+  //   'stereo'    Hard 2-channel downmix, no matrix encoding.
+  //
+  // Default 'preserve' aligns with the 2026-05-13 user decision that the
+  // audio HiFi path defaults to bit-perfect channel preservation; the
+  // video HLS pipeline still uses 'dplii' unconditionally because browser
+  // <video> elements do not consistently surface >2 channels.
+  AUDIO_DOWNMIX_DEFAULT: process.env.AUDIO_DOWNMIX_DEFAULT || 'preserve',
+
   // ---- Session ------------------------------------------------------
   SESSION_TTL_MS: Number(process.env.SESSION_TTL_MS) || 30 * 24 * 60 * 60 * 1000,
 

@@ -1942,6 +1942,49 @@ main {
 .ep-row.done .ep-title { color: var(--text-dim); }
 .ep-row.dragging { opacity: 0.5; }
 
+/* ── Session play-queue reorder controls (folding-list / draggable queue) ──
+   Only present on the player sidebar + audio queue rows (.q-row). The grip
+   starts a pointer-drag; touch-action:none keeps the gesture from scrolling
+   the list mid-drag. The up/down buttons are a tap fallback. */
+.q-grip {
+  flex: 0 0 auto;
+  align-self: center;
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  padding: 2px 2px;
+}
+.q-grip:active { cursor: grabbing; }
+.q-row.dragging { background: var(--active); }
+/* Desktop (mouse): the whole row is a drag handle, so hint with a grab
+   cursor. Touch devices reorder via the grip and keep tap-to-play. */
+@media (pointer: fine) {
+  .q-row { cursor: grab; }
+  .q-row.dragging { cursor: grabbing; }
+}
+.q-moves {
+  flex: 0 0 auto;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.q-moves button {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-dim);
+  font-size: 8px;
+  line-height: 1;
+  width: 22px;
+  height: 15px;
+  cursor: pointer;
+  padding: 0;
+}
+.q-moves button:hover { color: var(--accent); border-color: var(--accent); }
+
 .ep-index {
   flex: 0 0 32px;
   font-size: 13px;
@@ -4479,6 +4522,22 @@ video::cue {
 :root[data-theme="light"] .ep-menu {
   box-shadow: 0 0 0 1px #000, 4px 4px 0 #000;
 }
+/* In-popover chain "跟随" picker (折叠链表). */
+.ep-menu-follow {
+  padding: 8px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.ep-menu-follow-label {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+.ep-menu-follow select {
+  width: 100%;
+  max-width: 220px;
+  box-sizing: border-box;
+}
 
 /* Per-row ⋮ button */
 .ep-submenu-btn {
@@ -5043,6 +5102,9 @@ video::cue {
   .ep-submenu-btn { width: 32px; height: 32px; }
   .ep-submenu-btn svg { width: 16px; height: 16px; }
   .ep-row { padding: 14px 12px; }
+  /* Roomier reorder targets on touch screens. */
+  .q-grip { font-size: 20px; padding: 6px 4px; }
+  .q-moves button { width: 30px; height: 22px; font-size: 10px; }
   /* On phones, pin #mini-player to bottom but leave room for manage-bar */
   .manage-bar ~ * #mini-player,
   body:has(.manage-bar:not([hidden])) #mini-player {
@@ -5254,6 +5316,49 @@ video::cue {
   font-size: 10px;
   color: var(--text-dim);
   letter-spacing: 1px;
+}
+/* v1.9.0 HiFi metadata badge styles.
+ *
+ * The audio-ep-meta line now carries `<span class="hifi-badge ...">`
+ * suffixes for the lossless / lossy classification. Pill-shaped chip
+ * with a thin border + a colored dot to draw the eye without
+ * cluttering the line. The lossless variant uses the same accent
+ * color the player progress bar uses; lossy variant is more muted so
+ * users immediately see which tracks are HiFi-grade.
+ */
+.hifi-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  line-height: 14px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  background: transparent;
+  vertical-align: middle;
+}
+.hifi-badge.lossless {
+  border-color: rgba(120, 210, 160, 0.6);
+  color: rgb(150, 230, 180);
+  background: rgba(80, 180, 120, 0.12);
+}
+.hifi-badge.lossy {
+  border-color: rgba(180, 180, 180, 0.4);
+  color: var(--text-dim);
+  background: transparent;
+}
+/* Red banner when /audio-stream returns X-Audio-Degraded: opus-fallback.
+ * Reserved for future toast-class enhancement; ships as a CSS hook so
+ * the markup can be added without another style PR. */
+.audio-degraded-warning {
+  color: #ff8a80;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
 }
 #audio-player-wrap {
   padding: 16px 32px;
@@ -5563,6 +5668,46 @@ video::cue {
     background: var(--border-strong);
   }
   @keyframes amstSheetIn { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+  /* ── Sleep-timer bottom sheet (mobile) ──
+     On phones the anchored popover (positioned via the DESKTOP sleep
+     button's getBoundingClientRect + a 260px min-width) drifted off the
+     viewport. Here we override it into a full-width slide-up bottom
+     sheet, matching the queue sheet above. The JS open handler clears
+     the inline top/right it sets on desktop, so these rules win without
+     needing !important. */
+  #sleep-popover {
+    left: 0;
+    right: 0;
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    min-width: 0;
+    max-height: 70vh;
+    overflow-y: auto;
+    z-index: 9001;
+    padding-top: 22px;                 /* clearance for the grabber */
+    border-top: 1px solid var(--border-strong);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.6);
+    transform: translateY(100%);
+    animation: amstSheetIn 0.22s ease-out forwards;
+  }
+  /* Grabber handle, identical to the queue sheet's. */
+  #sleep-popover::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+  /* Larger tap targets inside the sheet on touch screens. */
+  #sleep-popover .sleep-presets button { padding: 12px 0; font-size: 12px; }
+  #sleep-popover .sleep-mode { padding: 10px 0; font-size: 13px; }
 
   /* Lyric panel: in default mobile state, hidden. Becomes a full-screen
      overlay when 歌词 button toggles .amst-lyric-active. */

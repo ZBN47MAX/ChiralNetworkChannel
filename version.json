@@ -1,7 +1,46 @@
 {
-  "version": "Release1.10.1",
-  "versionNums": "1.10.1",
+  "version": "Release1.12.0",
+  "versionNums": "1.12.0",
   "changelog": [
+    {
+      "version": "Release1.12.0",
+      "date": "2026-05-26",
+      "changes": [
+        "折叠链表分类（单向链表）：单集可在「⋮ 更多选项」弹出面板里设「跟随」，形成 A1←A2←A3 线性链；每个节点最多被一个节点跟随（已被跟随的从其他人下拉移除），尾永远紧贴头按链序排列。后端 episodeMeta 增 follows 字段 + sanitizeMeta 白名单 + E_FOLLOW_TAKEN/E_FOLLOW_CYCLE 约束；前端 applyChains 按 successor 链序输出。Why：用户「已知问题汇总」需求 #1。",
+        "会话级可拖动播放列表：进入播放按当前排序+链生成临时队列，音频队列与视频侧栏可拖动（PC 整行可抓 + 阈值区分点击/拖动；触屏走 ⠿ 手柄保留滚动）+ 上/下按钮；next/prev/循环/随机跟随；离开播放清空、不持久化。Why：需求 #2。",
+        "移动端音频定时面板改底部抽屉（复用队列/歌词抽屉模式 + 遮罩），修桌面按钮 rect 定位导致的溢出。Why：需求 #3。",
+        "详情页拖动排序实际落地：HTML5 DnD（触屏不触发）改为 Pointer Events，批量接口一次写全部 order 满足 allHaveOrder。",
+        "修复 sanitizeMeta 白名单漏 follows 导致写入后读回被剥离的 bug。"
+      ]
+    },
+    {
+      "version": "Release1.11.0",
+      "date": "2026-05-13",
+      "changes": [
+        "全格式适配 + HiFi 音频 + 真零等待基础设施（一次性大改）。Why：用户 2026-05-13 提需求「竭尽全力适配尽可能多的视频/音频格式 + 提高音频解码到 HiFi 质量」+「允许重构」+「开包即用」。Plan 文件 C:\\Users\\Alexander\\.claude\\plans\\mkv-hifi-fancy-shore.md 详述。",
+        "新模块 lib/concurrency.js：全局 ffmpeg/ffprobe spawn 信号量预算=1，foreground 抢占 background SIGKILL，统一 v1.9.0 RAM 让位教训的执法点。所有新 spawn 路径都走 acquire()/release()",
+        "新模块 lib/probe-cache.js：ffprobe wrapper + in-flight 去重 + 通过 concurrency.js 走 slot；输出统一 mediaInfo schema { container, durationSec, video, audio[], subs[], embeddedCover, error }",
+        "新模块 lib/media-route.js：单一决策点 decideVideoRoute(mediaInfo, browserCaps) → 'native'/'fmp4-mse'/'fmp4-streamTo'/'hls'，decideAudioRoute → 'byte-range'/'fmp4-flac'/'dsd-to-flac'/'fmp4-opus'。客户端 capability 由 capability.js 上报",
+        "新模块 lib/fmp4-stream.js：视频 fmp4 实时直流 + seek-restart 状态机（按 sessionId+episode 维护单一 ffmpeg，新 ?t= 请求 SIGKILL 旧 spawn 新的）+ on-disk cache 命中 sendFile。无等待替代 HLS 队列",
+        "新模块 lib/audio-stream.js：音频 HiFi 三档路由（fmp4-flac copy/encode 保 lossless / dsd-to-flac soxr precision=28 → 24/96 / fmp4-opus 510k 兜底）+ X-Audio-Degraded 头",
+        "lib/audio.js 重写：解锁 music-metadata 全字段 parseFile({}, ...)。schema v2 持久化到 episodeMeta[file]：codec/bitrate/sampleRate/bitDepth/channels/channelLayout/duration/album/genre/year/lossless/hasCover + mediaInfo 子结构（与视频共享 schema）。v1 旧记录自动重扫。封面写到 data/audio-covers/<sha1>.{jpg|png|webp}，LRU 200MB",
+        "lib/collections.js buildEpisodes：把 episodeMeta[file].mediaInfo 附加到 ep 对象暴露，前端 HiFi badge 直接读",
+        "lib/ffmpeg.js：REMUXABLE_VIDEO_CODECS 加 vp9/av1；REMUXABLE_AUDIO_CODECS 加 opus/vorbis/flac；新增 FMP4_MSE_MOVFLAGS 常量（separate_moof + frag_every_frame for MSE）；导出 FRAG_MP4_TAIL / mixedArgs / getBin 给新模块复用",
+        "config.js 新常量：AUDIO_COVER_CACHE_DIR / AUDIO_COVER_LRU_BYTES / PROBE_TICK_MS / FMP4_FRAG_DURATION_US / FMP4_CACHE_DIR / AUDIO_DOWNMIX_DEFAULT='preserve'",
+        "server.js 新增 GET /api/episode/:id/fmp4-stream 路由（视频实时直流）",
+        "server.js 新增 GET /audio-stream/:id/<file> 路由（音频 HiFi 决策 + spawn 或 302 重定向到 /audio-files byte-range）",
+        "server.js 新增 GET /audio-covers/:id/<file> 路由（封面 sendFile）",
+        "server.js 新增 POST /api/client-caps 路由 + getClientCaps 帮助函数（in-memory Map by session id；iOS UA 服务端嗅探，client 自报不被信任）",
+        "前端 public/capability.js：navigator.mediaCapabilities probe（hevc/av1/vp9/mkv/fmp4flac/fmp4alac/fmp4opus/mseFmp4Streaming）→ POST /api/client-caps 一次性",
+        "前端 public/video-mse.js：ChiralVideoMse class（fetch + mp4box demux + MSE appendBuffer + seek 触发 abort+restart + 错误 fallback hook）。本 PR 未在 playEpisode 接入，等 v1.11.1 follow-up",
+        "前端 public/vendor/mp4box.js：mp4box.js v0.5.4 静态本地化 dist/mp4box.all.min.js（~163KB MIT 协议）",
+        "前端 public/index.html：在 app.js 之前加载 capability.js + vendor/mp4box.js + video-mse.js 三个 script",
+        "前端 public/app.js：新增 audioStreamUrl/fmp4StreamUrl/formatAudioHiFiBadge helper。loadAudioTrack 切到 audioStreamUrl（serve 端按 codec 决定 byte-range 透传 / fmp4-flac remux / dsd 转换 / opus 兜底）。HiFi badge 渲染 «FLAC 24bit/96kHz · 5.1ch · 4127kbps + lossless pill» 替换旧 «#01 · FLAC · 25MB»",
+        "前端 public/style.css：新增 .hifi-badge / .hifi-badge.lossless / .hifi-badge.lossy / .audio-degraded-warning 系列样式",
+        "package.json 保留 1.8.0（未跟实际版本同步，version.json 才是事实来源）",
+        "不在本次范围（v1.11.x 候选）：视频 MSE 客户端集成 playEpisode（task 16）；SACD ISO；硬件加速；4K HEVC + 7.1 fmp4-mse 实时性测试；iOS Safari 零等待（平台限制）"
+      ]
+    },
     {
       "version": "Release1.10.1",
       "date": "2026-05-11",

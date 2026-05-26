@@ -656,6 +656,13 @@
          is just the dim backdrop + click-to-close target. -->
     <div id="amst-queue-mask" class="amst-mask amst-mask-dim" hidden></div>
 
+    <!-- Sleep-timer bottom-sheet backdrop (mobile only): on phones the
+         #sleep-popover below is restyled into a slide-up bottom sheet
+         (see the ≤600px media query) instead of an anchored popover,
+         which previously overflowed the viewport. This dim mask is the
+         click-to-close target for that sheet. Unused on desktop. -->
+    <div id="sleep-sheet-mask" class="amst-mask amst-mask-dim" hidden></div>
+
     <!-- ============================================================
          IMAGE GALLERY VIEWER
          ============================================================ -->
@@ -1132,6 +1139,15 @@
       <span class="menu-label">复制到...</span>
     </button>
     <div class="menu-divider"></div>
+    <!-- Chain-ordering (折叠链表): pick the head this episode trails.
+         Changing the value persists immediately and re-renders. -->
+    <div class="ep-menu-follow">
+      <span class="ep-menu-follow-label mono">// 跟随</span>
+      <select id="ep-follow-select" class="sort-select">
+        <option value="">— 不跟随 —</option>
+      </select>
+    </div>
+    <div class="menu-divider"></div>
     <button type="button" class="menu-item danger" data-ep-action="delete">
       <span class="menu-icon" data-icon="trash"></span>
       <span class="menu-label">删除</span>
@@ -1605,6 +1621,36 @@
       </div>
     </form>
   </dialog>
+
+  <!--
+    v1.9.0 client capability probe.
+
+    Runs once at module load (no `defer` needed — the script is self-
+    contained and never blocks rendering). POSTs a snapshot of
+    navigator.mediaCapabilities to /api/client-caps so server-side
+    media-route decisions can pick fmp4-mse, fmp4-flac, etc. for this
+    browser. See public/capability.js header comment for the full list.
+  -->
+  <script src="capability.js?v=__BUILD__"></script>
+  <!--
+    v1.9.0 mp4box.js demuxer (gpac/mp4box.js v0.5.4 dist).
+
+    Loaded lazily-but-eagerly: the file is shipped statically under
+    public/vendor/ so deploys pick it up automatically. video-mse.js
+    checks `typeof window.MP4Box === 'undefined'` and emits a
+    'mp4box-missing' error if the file isn't on disk yet — the
+    fmp4-mse video lane then falls back to HLS without crashing.
+  -->
+  <script src="vendor/mp4box.js?v=__BUILD__"></script>
+  <!--
+    v1.9.0 fmp4-mse video controller.
+
+    Exposes window.ChiralVideoMse. app.js instantiates it when the
+    server's /api/episode/:id/codecs response (or future client-side
+    route decision) indicates the fmp4-mse lane. Falls back to HLS on
+    fatal error.
+  -->
+  <script src="video-mse.js?v=__BUILD__"></script>
 
   <script src="app.js?v=__BUILD__"></script>
 </body>

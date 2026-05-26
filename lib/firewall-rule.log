@@ -1,33 +1,33 @@
 ﻿
-[17:20:30] Unelevated parent: requesting elevation. Action=Add Port=8080
-[17:20:32] Elevated child: Action=Add for 'Chiral Network Channel 8080'
-[17:20:33]   Scanning for legacy node.exe Block-Inbound rules ...
-[17:20:45]   Found 8 Block rule(s) that would override Allow:
-[17:20:45]     - 'Node.js JavaScript Runtime' Profile=Public Program=C:\program files\nodejs\node.exe
-[17:20:45]     - 'Node.js JavaScript Runtime' Profile=Public Program=C:\program files\nodejs\node.exe
-[17:20:45]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\playerbuild\chiral network channel\runtime\node.exe
-[17:20:45]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\playerbuild\chiral network channel\runtime\node.exe
-[17:20:45]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\ds124network\runtime\node.exe
-[17:20:45]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\ds124network\runtime\node.exe
-[17:20:45]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\ds124deploytest\chiral network channel\runtime\node.exe
-[17:20:45]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\ds124deploytest\chiral network channel\runtime\node.exe
-[17:20:45]   Saved restoration state to B:\DS124Network\lib\firewall-state.json
-[17:20:45]   Disabling them ...
-[17:20:45]     disabled: 'Node.js JavaScript Runtime' Profile=Public
-[17:20:46]     disabled: 'Node.js JavaScript Runtime' Profile=Public
-[17:20:46]     disabled: 'Node.js JavaScript Runtime' Profile=Public
-[17:20:47]     disabled: 'Node.js JavaScript Runtime' Profile=Public
-[17:20:47]     disabled: 'Node.js JavaScript Runtime' Profile=Public
-[17:20:47]     disabled: 'Node.js JavaScript Runtime' Profile=Public
-[17:20:48]     disabled: 'Node.js JavaScript Runtime' Profile=Public
-[17:20:48]     disabled: 'Node.js JavaScript Runtime' Profile=Public
-[17:20:48]   Removing any pre-existing rule named 'Chiral Network Channel 8080' ...
-[17:20:51]   Adding inbound TCP 8080 Allow rule (Profile=Any) ...
-[17:20:51]   OK -- rule 'Chiral Network Channel 8080' added.
-[17:20:55] 
-[17:20:55] VERIFY OK -- LAN access is now configured:
-[17:20:55]   Allow : 'Chiral Network Channel 8080' Profile=Any LocalPort=8080
-[17:20:55]   Block : 8 legacy node.exe Block rule(s) disabled
-[17:20:55] 
-[17:20:55] Phones / tablets on the same Wi-Fi can now connect.
-[17:20:56] Unelevated parent: elevated child returned. See log lines above.
+[22:32:46] Unelevated parent: requesting elevation. Action=Add Port=8080
+[22:32:49] Elevated child: Action=Add for 'Chiral Network Channel 8080'
+[22:32:49]   Scanning for legacy node.exe Block-Inbound rules ...
+[22:32:51]   Found 8 Block rule(s) that would override Allow:
+[22:32:51]     - 'Node.js JavaScript Runtime' Profile=Public Program=C:\program files\nodejs\node.exe
+[22:32:51]     - 'Node.js JavaScript Runtime' Profile=Public Program=C:\program files\nodejs\node.exe
+[22:32:51]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\playerbuild\chiral network channel\runtime\node.exe
+[22:32:51]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\playerbuild\chiral network channel\runtime\node.exe
+[22:32:51]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\ds124network\runtime\node.exe
+[22:32:51]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\ds124network\runtime\node.exe
+[22:32:51]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\ds124deploytest\chiral network channel\runtime\node.exe
+[22:32:51]     - 'Node.js JavaScript Runtime' Profile=Public Program=B:\ds124deploytest\chiral network channel\runtime\node.exe
+[22:32:51]   Saved restoration state to B:\DS124Network\lib\firewall-state.json
+[22:32:51]   Disabling them ...
+[22:32:52]     disabled: 'Node.js JavaScript Runtime' Profile=Public
+[22:32:52]     disabled: 'Node.js JavaScript Runtime' Profile=Public
+[22:32:52]     disabled: 'Node.js JavaScript Runtime' Profile=Public
+[22:32:52]     disabled: 'Node.js JavaScript Runtime' Profile=Public
+[22:32:52]     disabled: 'Node.js JavaScript Runtime' Profile=Public
+[22:32:52]     disabled: 'Node.js JavaScript Runtime' Profile=Public
+[22:32:52]     disabled: 'Node.js JavaScript Runtime' Profile=Public
+[22:32:52]     disabled: 'Node.js JavaScript Runtime' Profile=Public
+[22:32:52]   Removing any pre-existing rule named 'Chiral Network Channel 8080' ...
+[22:32:53]   Adding inbound TCP 8080 Allow rule (Profile=Any) ...
+[22:32:53]   OK -- rule 'Chiral Network Channel 8080' added.
+[22:32:54] 
+[22:32:54] VERIFY OK -- LAN access is now configured:
+[22:32:54]   Allow : 'Chiral Network Channel 8080' Profile=Any LocalPort=8080
+[22:32:54]   Block : 8 legacy node.exe Block rule(s) disabled
+[22:32:54] 
+[22:32:54] Phones / tablets on the same Wi-Fi can now connect.
+[22:32:54] Unelevated parent: elevated child returned. See log lines above.

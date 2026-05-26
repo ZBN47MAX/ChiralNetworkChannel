@@ -6,7 +6,7 @@
 
 **自托管私人媒体库 · Self-hosted Personal Media Library**
 
-[![Version](https://img.shields.io/badge/version-1.10.1-blue.svg)](version.json)
+[![Version](https://img.shields.io/badge/version-1.11.0-blue.svg)](version.json)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Synology%20DS124-lightgrey.svg)]()
 [![License](https://img.shields.io/badge/license-AS--IS-orange.svg)](#license--许可)
 
@@ -22,8 +22,8 @@
 
 ### ✨ 主要功能
 
-- 🎬 **视频** — H.264 / H.265 / mkv 多音轨,服务端 HLS 转码(只在浏览器不支持时启用),内挂 / 外挂字幕(srt / ass / sup)
-- 🎵 **音频** — 专辑封面、嵌入式歌词、播放进度同步
+- 🎬 **视频** — H.264 / H.265 / VP9 / AV1 / mkv 多音轨,服务端 fmp4 实时直流 + HLS 兼容回退(只在浏览器不支持时启用),内挂 / 外挂字幕(srt / ass / sup)
+- 🎵 **音频 HiFi** — FLAC / ALAC / APE / WavPack / DSD 等无损源全适配(v1.11.0+),浏览器解不动的格式自动 fmp4-FLAC remux 保真传输,UI 显示比特率 / 采样率 / 位深 / 声道(「FLAC 24bit/96kHz · 5.1ch · 无损」),5.1/7.1 默认保留原通道,专辑封面、嵌入式歌词、播放进度同步
 - 🖼️ **图片** — 漫画 / 画册式翻页阅读
 - 📖 **小说** — txt / epub / pdf 阅读器
 - 👥 **多用户** — 角色权限、按分类的可见性控制
@@ -92,8 +92,8 @@ A self-hosted private media library that runs on a **Synology DS124 NAS** or a *
 
 ### ✨ Features
 
-- 🎬 **Video** — H.264 / H.265 / multi-audio mkv, server-side HLS transcoding (only when the browser can't play it natively), embedded / sidecar subtitles (srt / ass / sup)
-- 🎵 **Audio** — Cover art, embedded lyrics, cross-device progress sync
+- 🎬 **Video** — H.264 / H.265 / VP9 / AV1 / multi-audio mkv, server-side fmp4 live-stream + HLS compatibility fallback (only when the browser can't play it natively), embedded / sidecar subtitles (srt / ass / sup)
+- 🎵 **HiFi Audio** — Full lossless coverage for FLAC / ALAC / APE / WavPack / DSD (v1.11.0+); formats the browser can't decode are losslessly remuxed to fmp4-FLAC on the fly; UI shows codec / bitrate / sample rate / bit depth / channels ("FLAC 24bit/96kHz · 5.1ch · Lossless"); 5.1 / 7.1 channels preserved by default; cover art, embedded lyrics, cross-device progress sync
 - 🖼️ **Images** — Comic / album-style page-flip reader
 - 📖 **Novels** — txt / epub / pdf reader
 - 👥 **Multi-user** — Role-based permissions, per-category visibility

@@ -271,6 +271,7 @@
   const manageDeleteBtn = $('manage-delete-btn');
   const manageExitBtn   = $('manage-exit-btn');
   const epMenu          = $('ep-menu');
+  const epFollowSelect  = $('ep-follow-select');
 
   const createDialog = $('create-dialog');
   const createForm   = $('create-form');
@@ -445,6 +446,16 @@
     // auto-next events (each next-navigation writes the same scope
     // back into the URL).
     specifiedPlayScope: null,
+    // Session play queue (会话级播放列表): an in-memory, NON-persisted
+    // ordering of the currently-playing collection's episodes that the
+    // user can drag to reorder during playback. Shape:
+    //   { colId: string, order: [fileKey, ...] }   or null when inactive.
+    // Seeded from the sort preference + chain gluing when a collection
+    // starts playing, rebuilt on collection switch or sort change, and
+    // discarded when the playback screen is left (see handleRoute) or on
+    // reload. next/prev read it via scopedEpisodes, so playback order
+    // follows the user's manual arrangement.
+    playQueue: null,
     // Collection-level bulk manage mode (home page, admin only).
     // Distinct from episode-level manageMode which works inside a
     // collection detail view.
@@ -570,8 +581,60 @@
   function setEpSortPref(collectionId, field, asc) {
     try { localStorage.setItem(EP_SORT_PREFIX + collectionId, JSON.stringify({ field, asc })); } catch (_e) {}
   }
+  /**
+   * @brief Re-sequence an ordered episode list so each chain is contiguous,
+   *        ordered by its links (折叠链表 = a singly-linked list).
+   * @details `follows` is a predecessor pointer: episode B with
+   *          `follows === A` comes directly after A. The chain is a true
+   *          linked list — each episode may be followed by at most ONE
+   *          other (enforced when the pointer is set), so chains are linear:
+   *          A ← B ← C renders as A B C. A "head" is an episode that does
+   *          not follow any present episode; from each head we walk the
+   *          successor links and emit the whole chain in link order,
+   *          right where the head sits in the incoming order. Heads keep
+   *          their relative position; the link order — NOT the incoming
+   *          order — decides the sequence inside a chain, so dragging a
+   *          chain member around can't scramble it.
+   *
+   *          Robustness: a pointer to a missing file (deleted head) makes
+   *          the episode its own head; if bad data has two episodes
+   *          following the same node, only the first claims the successor
+   *          slot and the rest are appended at the end; a cycle is broken
+   *          by a visited-guard. Input is not mutated.
+   * @param eps Episodes in some already-decided display order.
+   * @return A new array with chains glued in link order.
+   */
+  function applyChains(eps) {
+    if (!Array.isArray(eps) || eps.length < 2) return eps;
+    const byFile = new Map(eps.map((e) => [e.file, e]));
+    // successor map: predecessor file -> the episode that follows it.
+    const succ = new Map();
+    const isTail = new Set();
+    for (const e of eps) {
+      if (e.follows && byFile.has(e.follows)) {
+        isTail.add(e.file);
+        if (!succ.has(e.follows)) succ.set(e.follows, e);   // first claimant wins
+      }
+    }
+    if (!isTail.size) return eps;    // no chains configured — cheap exit
+    const out = [];
+    const emitted = new Set();
+    for (const e of eps) {
+      if (isTail.has(e.file) || emitted.has(e.file)) continue;  // not a head
+      let cur = e;
+      while (cur && !emitted.has(cur.file)) {                   // walk the links
+        out.push(cur);
+        emitted.add(cur.file);
+        cur = succ.get(cur.file);
+      }
+    }
+    // Append anything left over (orphaned by bad multi-follow data / cycles).
+    for (const e of eps) if (!emitted.has(e.file)) out.push(e);
+    return out;
+  }
+
   function sortEpisodes(episodes, field, asc) {
-    if (field === 'default') return episodes;
+    if (field === 'default') return applyChains(episodes);
     const cmp = (a, b) => {
       let va, vb;
       switch (field) {
@@ -596,7 +659,7 @@
     };
     const sorted = episodes.slice().sort(cmp);
     if (!asc) sorted.reverse();
-    return sorted;
+    return applyChains(sorted);
   }
   // Sync sort bar UI to a preference object and show/hide it.
   function syncSortBar(selectEl, dirBtn, bar, pref, show) {
@@ -1775,6 +1838,16 @@
     // Doing this BEFORE the view dispatch means every await below
     // operates with the correct scope already in state.
     state.specifiedPlayScope = (r.view === 'player') ? (r.scope != null ? r.scope : null) : null;
+    // Leaving the playback screen discards the session play queue, so the
+    // manual order lives only "for this play". The one exception: audio
+    // that keeps playing in the background mini-player — its queue must
+    // survive so auto-advance keeps honoring the user's order. Video has
+    // no background mode, so exiting its player always clears.
+    if (r.view !== 'player' && state.playQueue) {
+      const ap = state.audioNowPlaying;
+      const bgAudioSameCol = ap && ap.col && ap.col.id === state.playQueue.colId;
+      if (!bgAudioSameCol) state.playQueue = null;
+    }
     try {
       if (r.view === 'login')    await showLogin();
       else if (r.view === 'home')    await showHome();
@@ -2403,7 +2476,26 @@
     // to a different view while audio keeps playing in the background.
     state.audioNowPlaying = { col: collection, file: ep.file };
     swapAudioPlayerForEp(ep);
-    audioPlayerEl.src = mediaUrl(collection.id, ep.file);
+    // v1.9.0: route audio through the HiFi /audio-stream endpoint so
+    // the server can pick the right lane (byte-range native, fmp4-fLaC
+    // remux, DSD-to-FLAC, or Opus fallback). For browser-native codecs
+    // the server 302-redirects to /audio-files so behavior is identical
+    // to legacy clients.
+    audioPlayerEl.src = audioStreamUrl(collection.id, ep.file);
+    // X-Audio-Degraded response header signals an Opus fallback; the
+    // <audio> element doesn't surface response headers directly, so we
+    // attach a one-shot listener via a HEAD probe on first error. Most
+    // playbacks never hit this path.
+    if (audioPlayerEl.dataset.degradedListener !== '1') {
+      audioPlayerEl.dataset.degradedListener = '1';
+      audioPlayerEl.addEventListener('error', () => {
+        // Best-effort: emit a toast hinting at the issue. Specific
+        // diagnostics come from server logs.
+        if (typeof toast === 'function') {
+          try { toast('音频播放失败，请检查浏览器是否支持当前编码', 'warn', 6000); } catch (_e) {}
+        }
+      });
+    }
     // Seek on loadedmetadata (the element doesn't know its duration
     // until then; setting currentTime before metadata is a no-op).
     const onMeta = () => {
@@ -5341,9 +5433,13 @@
   function renderEpisodeList(collection, listEl, isSidebar) {
     const colProgress = state.progressAll[collection.id] || {};
     const canEdit = canPerm('delete') && !isSidebar;
-    // Apply per-collection episode sort.
+    // The player sidebar (isSidebar) is the session play queue — render
+    // it in play-queue order and make it reorderable. The detail-page
+    // list (browse / admin) keeps the persisted sort + admin drag-order.
     const pref = getEpSortPref(collection.id);
-    const eps = sortEpisodes(collection.episodes, pref.field, pref.asc);
+    const eps = isSidebar
+      ? orderedEpisodes(collection)
+      : sortEpisodes(collection.episodes, pref.field, pref.asc);
     // Track the directory the current row sits in, so we can insert
     // a group header whenever the path prefix changes. collection.episodes
     // is already sorted tree-walk order by the backend, which means
@@ -5407,9 +5503,18 @@
       const submenuBtn = editableHere
         ? `<button type="button" class="ep-submenu-btn" data-file="${encodeURIComponent(ep.file)}" title="更多" aria-label="更多"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>`
         : '';
+      // Reorder grip — shown on the player sidebar (session queue) AND on
+      // the detail page for editable rows (admin persisted order). Both
+      // drive the pointer-based reorder. Up/down buttons are queue-only.
+      const showGrip = isSidebar || (editableHere && !state.manageMode);
+      const queueGrip = showGrip ? `<span class="q-grip" title="拖动排序" aria-label="拖动排序">⠿</span>` : '';
+      const queueMoves = isSidebar
+        ? `<span class="q-moves"><button type="button" class="q-up" title="上移" aria-label="上移">▲</button><button type="button" class="q-down" title="下移" aria-label="下移">▼</button></span>`
+        : '';
       pieces.push(`
-        <li class="ep-row${active}${done}${selected}${nested}" data-file="${encodeURIComponent(ep.file)}" draggable="${editableHere && !state.manageMode ? 'true' : 'false'}">
+        <li class="ep-row${active}${done}${selected}${nested}${showGrip ? ' q-row' : ''}" data-file="${encodeURIComponent(ep.file)}">
           ${manageCheckbox}
+          ${queueGrip}
           <div class="ep-index mono">${String(ep.order).padStart(2, '0')}</div>
           ${trackCover}
           <div class="ep-body">
@@ -5419,6 +5524,7 @@
             ${ep.description ? `<div class="ep-desc">${escapeHtml(ep.description)}</div>` : ''}
           </div>
           ${submenuBtn}
+          ${queueMoves}
         </li>
       `);
     }
@@ -5429,6 +5535,8 @@
     for (const row of listEl.querySelectorAll('li.ep-row[data-file]')) {
       row.addEventListener('click', (e) => {
         if (e.target.closest('.ep-submenu-btn')) return;
+        // Reorder controls (sidebar queue) manipulate the queue, not playback.
+        if (e.target.closest('.q-grip, .q-up, .q-down')) return;
         const file = decodeURIComponent(row.dataset.file);
         if (state.manageMode) {
           if (state.selectedEpisodes.has(file)) state.selectedEpisodes.delete(file);
@@ -5448,54 +5556,41 @@
       });
     }
     if (canEdit && !state.manageMode) wireEpisodeDragReorder(listEl, collection);
+    // Player sidebar = session play queue → enable in-memory reordering.
+    if (isSidebar) wireQueueDragReorder(listEl, collection, () => renderEpisodeList(collection, listEl, isSidebar));
   }
 
+  // Admin persisted reorder on the detail page. Pointer-based (works on
+  // touch + mouse; the previous HTML5-DnD version did nothing on phones)
+  // via the shared wirePointerReorder helper, committing the full order
+  // to episodeMeta.order through the bulk endpoint.
   function wireEpisodeDragReorder(listEl, collection) {
-    let dragging = null;
-    for (const row of listEl.querySelectorAll('li.ep-row[data-file]')) {
-      row.addEventListener('dragstart', (e) => {
-        dragging = row;
-        row.classList.add('dragging');
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      row.addEventListener('dragend', () => {
-        dragging && dragging.classList.remove('dragging');
-        dragging = null;
-      });
-      row.addEventListener('dragover', (e) => {
-        if (!dragging || dragging === row) return;
-        e.preventDefault();
-        const rect = row.getBoundingClientRect();
-        const after = (e.clientY - rect.top) > rect.height / 2;
-        row.parentNode.insertBefore(dragging, after ? row.nextSibling : row);
-      });
-      row.addEventListener('drop', async (e) => {
-        e.preventDefault();
-        await persistEpisodeOrder(listEl, collection);
-      });
-    }
+    wirePointerReorder(listEl, (files) => { persistEpisodeOrder(collection, files); });
   }
-  async function persistEpisodeOrder(listEl, collection) {
-    const rows = Array.from(listEl.querySelectorAll('li.ep-row[data-file]'));
-    let changed = 0;
-    for (let i = 0; i < rows.length; i++) {
-      const file = decodeURIComponent(rows[i].dataset.file);
-      const ep = collection.episodes.find((e) => e.file === file);
-      if (!ep) continue;
-      const newOrder = i + 1;
-      if (ep.order !== newOrder) {
-        try {
-          await api('PATCH',
-            '/api/collections/' + encodeURIComponent(collection.id) + '/episodes/' + encodeURIComponent(file),
-            { order: newOrder });
-          changed++;
-        } catch (err) {
-          toast('顺序保存失败: ' + err.message, 'error');
-          return;
-        }
-      }
+  /**
+   * @brief Persist a full episode order to the server (admin).
+   * @details Sends EVERY episode's new 1..N order in one bulk request.
+   *          A full ordering matters: buildEpisodes only honors manual
+   *          order when ALL episodes carry one (the allHaveOrder gate);
+   *          the old code PATCHed only changed rows, which could leave
+   *          some at order=null and silently discard the reorder.
+   * @param collection The collection being reordered.
+   * @param files      The desired order as a list of file keys.
+   */
+  async function persistEpisodeOrder(collection, files) {
+    const valid = files.filter((f) => collection.episodes.some((e) => e.file === f));
+    if (valid.length < 2) return;
+    const items = valid.map((f, i) => ({ file: f, order: i + 1 }));
+    try {
+      await api('POST',
+        '/api/collections/' + encodeURIComponent(collection.id) + '/episodes/reorder',
+        { items });
+      toast('已更新顺序', 'success');
+      showDetail(collection.id);
+    } catch (err) {
+      toast('顺序保存失败: ' + (err.message || ''), 'error');
+      showDetail(collection.id);   // re-render to snap rows back to truth
     }
-    if (changed) { toast('已更新顺序', 'success'); showDetail(collection.id); }
   }
 
   // =================================================================
@@ -5872,18 +5967,91 @@
   // ==================================================================
   // EPISODE SUBMENU (per-row ⋮)
   // ==================================================================
+  /**
+   * @brief Fill the in-popover "跟随" picker for a given episode.
+   * @details Reads live state.currentCollection (refreshed by showDetail
+   *          after every change), so the selected value always reflects
+   *          what is currently persisted — fixing the stale "不跟随"
+   *          display.
+   *
+   *          Linked-list rule: each episode may be followed by at most one
+   *          other, so a candidate target is offered only when its
+   *          "successor slot" is free — i.e. no OTHER episode already
+   *          follows it. (That is why, once A2 follows A1, A1 disappears
+   *          from everyone else's list and only A2 — the current tail — can
+   *          be followed onward.) Self and any choice that would close a
+   *          loop are also excluded.
+   * @param file The episode the popover was opened for.
+   */
+  function populateEpFollowSelect(file) {
+    if (!epFollowSelect || !state.currentCollection) return;
+    const col = state.currentCollection;
+    const eps = col.episodes;
+    const byFile = new Map(eps.map((e) => [e.file, e]));
+    const ep = byFile.get(file);
+    // Which files already have a follower OTHER than `file` (slot taken).
+    const slotTaken = new Set();
+    for (const e of eps) {
+      if (e.file !== file && e.follows && byFile.has(e.follows)) slotTaken.add(e.follows);
+    }
+    // Would file → T close a loop? Walk T's predecessor links; hitting
+    // `file` means file is already upstream of T.
+    const wouldCycle = (target) => {
+      let cur = byFile.get(target);
+      const seen = new Set();
+      while (cur && cur.follows && byFile.has(cur.follows) && !seen.has(cur.file)) {
+        if (cur.follows === file) return true;
+        seen.add(cur.file);
+        cur = byFile.get(cur.follows);
+      }
+      return false;
+    };
+    const opts = ['<option value="">— 不跟随 —</option>'];
+    for (const other of eps) {
+      if (other.file === file) continue;
+      if (slotTaken.has(other.file)) continue;     // already has a follower
+      if (wouldCycle(other.file)) continue;         // would form a loop
+      opts.push(`<option value="${escapeHtml(other.file)}">${escapeHtml(other.title || other.file)}</option>`);
+    }
+    epFollowSelect.innerHTML = opts.join('');
+    epFollowSelect.value = ep && ep.follows ? ep.follows : '';
+  }
+
   function openEpisodeSubmenu(anchorBtn, file) {
     state.editingEpisodeFile = file;
     injectIcons(epMenu);
+    populateEpFollowSelect(file);
     const rect = anchorBtn.getBoundingClientRect();
     // Position popover below the button, clipped to viewport.
     let top = rect.bottom + 4;
     let left = rect.right - 160;  // popover width ~160
     if (left < 8) left = 8;
-    if (top + 200 > window.innerHeight) top = rect.top - 200;
+    if (top + 260 > window.innerHeight) top = Math.max(8, rect.top - 260);
     epMenu.style.top = top + 'px';
     epMenu.style.left = left + 'px';
     epMenu.hidden = false;
+  }
+  // Chain-ordering: changing the in-popover "跟随" picker persists the
+  // follows pointer immediately and re-renders (showDetail), so the new
+  // chain order is visible at once. Bound once — the select is a fixed
+  // element; the target episode comes from state.editingEpisodeFile.
+  if (epFollowSelect) {
+    epFollowSelect.addEventListener('change', async () => {
+      const file = state.editingEpisodeFile;
+      const col = state.currentCollection;
+      if (!file || !col) return;
+      const val = epFollowSelect.value;
+      epMenu.hidden = true;
+      try {
+        await api('PATCH',
+          '/api/collections/' + encodeURIComponent(col.id) + '/episodes/' + encodeURIComponent(file),
+          { follows: val });
+        toast(val ? '已设置跟随' : '已取消跟随', 'success');
+        showDetail(col.id);
+      } catch (err) {
+        toast('设置失败: ' + (err.message || ''), 'error');
+      }
+    });
   }
   epMenu.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-ep-action]');
@@ -6033,6 +6201,7 @@
         p.field = sel2.value;
         setEpSortPref(collection.id, p.field, p.asc);
         btn2.textContent = p.asc ? '↑' : '↓';
+        buildPlayQueue(collection);   // sort change re-seeds the queue
         renderEpisodeList(collection, playerEpisodeList, true);
       });
       btn2.addEventListener('click', () => {
@@ -6040,6 +6209,7 @@
         p.asc = !p.asc;
         setEpSortPref(collection.id, p.field, p.asc);
         btn2.textContent = p.asc ? '↑' : '↓';
+        buildPlayQueue(collection);   // sort change re-seeds the queue
         renderEpisodeList(collection, playerEpisodeList, true);
       });
     }
@@ -6139,14 +6309,196 @@
           }
         }
         if (state.hlsToken !== hlsToken) { hidePlayerLoading(); return; }
-        // v1.9.0 shape — server says HLS is needed but not ready.
-        // Stop here: do NOT fall through to the native byte-range
-        // path below. For multi-channel EAC3 sources the browser can
-        // decode the H.264 video but no codec for the audio, leaving
-        // playback silent and the user staring at a soundless picture.
-        // Surface a toast so the user understands "still cooking".
+        // v1.11.0 zero-wait video lane. Three-step fallback ladder:
+        //
+        //   1. fmp4-mse        ChiralVideoMse + mp4box.js + the new
+        //                      /api/episode/:id/fmp4-stream endpoint.
+        //                      Streams a live fragmented MP4 directly
+        //                      into MediaSource. ~1 s to first frame,
+        //                      seek-restart fully supported.
+        //
+        //   2. fmp4-streamTo   Plain <video src="/media-stream/...">.
+        //                      The legacy mixedArgs pipeline already
+        //                      copies the source video and re-encodes
+        //                      audio (dplii downmix). No MSE / mp4box
+        //                      dependency. No seek support (each ?t=
+        //                      re-spawns ffmpeg) but immediate play.
+        //
+        //   3. HLS toast       v1.10.x behavior: tell the user the
+        //                      transcoding queue is still running and
+        //                      bail out without starting playback.
+        //
+        // P1 (v1.11.0 fix): the previous v1.11.0 implementation gated
+        // step 1 on window.chiralCaps.mseFmp4Streaming, which is set
+        // ASYNC by public/capability.js's probe + POST handshake. A
+        // user who clicked Play within ~500 ms of page load saw caps
+        // as undefined and skipped step 1 entirely, landing on toast.
+        // The fix is to use only SYNCHRONOUSLY-observable evidence
+        // (window.ChiralVideoMse + MP4Box + MediaSource) and probe
+        // capability on the fly (MediaSource.isTypeSupported is sync).
+        // capability.js still runs and the POST is still useful for
+        // future server-side route decisions, but the player no longer
+        // waits on it.
+        //
+        // Background HLS queue is preserved: lib/fmp4-stream.js writes
+        // partial output.mp4 to data/hls-cache/<sha1>/ so the second
+        // playback of the same file is a cache-hit sendFile (zero CPU).
+        // iOS continues to use HLS via the same queue.
         if (pendingDetail) {
-          hidePlayerLoading();
+          const ua = (navigator && navigator.userAgent) || '';
+          const isIOS = /\b(iPhone|iPad|iPod)\b/.test(ua)
+            || /CPU (?:iPhone )?OS \d+/.test(ua);
+          // v1.11.1: fmp4-mse default disabled. mp4box.js demuxer
+          // hangs on PTS-anomaly sources (Redline.mkv) with no
+          // observable failure mode (no onError, just silent
+          // pending). Falling back via 8s timeout is correct but
+          // the user-visible latency is unacceptable. fmp4-streamTo
+          // (plain <video src>) is 0.5-2s startup, browser-native
+          // decoding, no mp4box dependency — strictly safer.
+          //
+          // We keep the fmp4-mse code path in place + the capability
+          // probe in capability.js so a future toggle (admin pref,
+          // URL flag) can re-enable it for users who specifically
+          // want seek-restart-without-respawn. Default behavior is
+          // streamTo across the board.
+          //
+          // To experiment locally: temporarily flip mseHealthy to
+          // the previous expression. Watch the console for
+          // [fmp4-mse:timeout] or [fmp4-mse:mp4box-error] tags —
+          // those are the canonical fail modes we're avoiding.
+          const mseHealthy = false;
+
+          if (window.console && window.console.info) {
+            window.console.info(
+              '[playEpisode] HLS pending — mseHealthy=' + mseHealthy + ' isIOS=' + isIOS + ' file=' + ep.file
+            );
+          }
+
+          // ----- Step 1: fmp4-mse -----
+          if (mseHealthy) {
+            showPlayerLoading('零等待直流准备中…');
+            try {
+              const streamUrl = fmp4StreamUrl(collection.id, ep.file);
+              // Pass resumeAt as startSec so:
+              //   1. server-side ffmpeg seeks via -ss <resumeAt> from
+              //      the first frame, so user starts ~resumeAt seconds
+              //      into the file without any client-side seek dance.
+              //   2. ChiralVideoMse stamps lastSeekTo = resumeAt,
+              //      preventing the AbortError race where the browser-
+              //      internal `seeked` to resumeAt would otherwise be
+              //      treated as a user seek and trigger a redundant
+              //      fmp4 restart that tears down play() Promise.
+              await attachFmp4Mse(streamUrl, '', resumeAt > 0 ? resumeAt : 0);
+              if (state.hlsToken !== hlsToken) {
+                hidePlayerLoading();
+                return;
+              }
+              // v1.11.0 audio-track switching support: populate the
+              // same state.hlsCollectionId / state.hlsEpFile / state.
+              // serverAudioTracks set the HLS path uses, so the
+              // settings-menu picker has data to display and
+              // switchHlsAudio's fmp4-mse branch (also v1.11.0) can
+              // find the cid/file pair when the user picks a
+              // different language.
+              state.hlsCollectionId = collection.id;
+              state.hlsEpFile = ep.file;
+              try {
+                const tracks = await fetchEpisodeAudioTracks(collection.id, ep.file);
+                if (state.hlsToken !== hlsToken) { hidePlayerLoading(); return; }
+                state.serverAudioTracks = tracks;
+                if (tracks.length > 0 && tracks[0].streamIndex != null) {
+                  state.currentHlsAudioIdx = tracks[0].streamIndex;
+                }
+              } catch (_e) { /* keep menu empty on failure */ }
+              hidePlayerLoading();
+              if (window.console && window.console.info) {
+                window.console.info('[playEpisode] fmp4-mse OK (startSec=' + resumeAt + ')');
+              }
+              // Resume position is honored server-side via -ss <resumeAt>
+              // on the fmp4-stream spawn, so the browser-internal
+              // currentTime is already at the right offset. We only
+              // re-apply playback speed + kick play() through the
+              // safePlay helper to swallow the AbortError that fires
+              // when the MSE rebuild races the play() Promise (the
+              // exact symptom users saw on the Redline test file).
+              const onCanPlay = () => {
+                try { if (state.plyr) state.plyr.speed = state.playerSpeed; } catch (_e) {}
+                safePlay();
+              };
+              if (state.plyr) state.plyr.once('canplay', onCanPlay);
+              else player.addEventListener('canplay', onCanPlay, { once: true });
+              return;
+            } catch (e) {
+              hidePlayerLoading();
+              if (window.console && window.console.warn) {
+                window.console.warn(
+                  '[playEpisode] fmp4-mse failed (' + (e && e.message) + '), trying fmp4-streamTo'
+                );
+              }
+            }
+          }
+
+          // ----- Step 2: fmp4-streamTo (legacy /media-stream pipe) -----
+          // Forces forceStream:true so videoSrcFor returns /media-stream/...
+          // regardless of file extension whitelist (.mkv is on the
+          // native-friendly whitelist but multi-channel EAC3/DTS need
+          // the transcode pipe).
+          //
+          // v1.11.1 CRITICAL: flag state.currentIsStream so the in-
+          // player seek handler (line ~13431) knows to translate user
+          // seeks into a fresh /media-stream?t=<target> request. Without
+          // this, the legacy `streaming = needsTranscode(ep.ext)` check
+          // at line 6108 left the flag false for .mkv (it's on the
+          // native-friendly whitelist), and seeking on a multi-channel
+          // .mkv that landed in step 2 silently broke — the user clicked
+          // ahead and the player just stalled until the chunked stream
+          // caught up naturally.
+          try {
+            disposeHls();
+            state.currentIsStream = true;
+            state.streamStartSec = resumeAt > 3 ? resumeAt : 0;
+            const streamToUrl = videoSrcFor(collection.id, ep.file, {
+              forceStream: true,
+              startSec: resumeAt > 3 ? resumeAt : 0,
+            });
+            const onCanPlay = () => {
+              hidePlayerLoading();
+              // Resume position is honored server-side via ?t=<resumeAt>
+              // baked into streamToUrl above; we deliberately do NOT
+              // set currentTime here because that would (a) trigger
+              // the in-player `seeking` listener at line ~13431,
+              // which would issue ANOTHER /media-stream?t= request
+              // and double-spawn ffmpeg, and (b) race the play()
+              // Promise into an AbortError.
+              try { if (state.plyr) state.plyr.speed = state.playerSpeed; } catch (_e) {}
+              safePlay();
+            };
+            showPlayerLoading('实时转码中…');
+            if (state.plyr) {
+              state.plyr.source = {
+                type: 'video',
+                sources: [{ src: streamToUrl, type: 'video/mp4' }],
+              };
+              state.plyr.once('canplay', onCanPlay);
+            } else {
+              player.src = streamToUrl;
+              try { player.load(); } catch (_e) {}
+              player.addEventListener('canplay', onCanPlay, { once: true });
+            }
+            if (window.console && window.console.info) {
+              window.console.info('[playEpisode] fmp4-streamTo attached: ' + streamToUrl);
+            }
+            return;
+          } catch (e) {
+            hidePlayerLoading();
+            if (window.console && window.console.warn) {
+              window.console.warn(
+                '[playEpisode] fmp4-streamTo failed (' + (e && e.message) + '), falling back to HLS toast'
+              );
+            }
+          }
+
+          // ----- Step 3: HLS toast (legacy bail-out) -----
           toast(formatTranscodingMessage(pendingDetail), 'warn', 8000);
           return;
         }
@@ -6713,6 +7065,7 @@
         p.field = sel3.value;
         setEpSortPref(collection.id, p.field, p.asc);
         btn3.textContent = p.asc ? '↑' : '↓';
+        buildPlayQueue(collection);   // sort change re-seeds the queue
         renderAudioEpisodeList(collection);
       });
       btn3.addEventListener('click', () => {
@@ -6720,6 +7073,7 @@
         p.asc = !p.asc;
         setEpSortPref(collection.id, p.field, p.asc);
         btn3.textContent = p.asc ? '↑' : '↓';
+        buildPlayQueue(collection);   // sort change re-seeds the queue
         renderAudioEpisodeList(collection);
       });
     }
@@ -6753,11 +7107,11 @@
     probe.src = trackCoverUrl;
 
     audioEpTitle.textContent = ep.title;
-    audioEpMeta.textContent = [
-      '#' + String(ep.order).padStart(2, '0'),
-      (ep.ext || '').toUpperCase(),
-      formatSize(ep.size),
-    ].join(' · ');
+    // v1.9.0 HiFi badge — replaces the legacy "#01 · FLAC · 25 MB" line
+    // with a richer "FLAC 24bit/96kHz · 5.1ch · 4127kbps [Lossless]"
+    // render. Falls back to the legacy format when mediaInfo isn't
+    // present yet (first boot or pending probe-queue scan).
+    audioEpMeta.innerHTML = formatAudioHiFiBadge(ep);
     // Mobile stage title block — mirrors the desktop title/meta plus
     // the artist (which the desktop layout omits) and collection name.
     const amstTitle = document.getElementById('amst-title');
@@ -6809,8 +7163,9 @@
 
   function renderAudioEpisodeList(collection) {
     if (!audioEpisodeList) return;
-    const pref = getEpSortPref(collection.id);
-    const eps = sortEpisodes(collection.episodes, pref.field, pref.asc);
+    // Render in session play-queue order so the list IS the queue: drag
+    // to reorder here changes what plays next.
+    const eps = orderedEpisodes(collection);
     const rows = eps.map((ep) => {
       const p = (state.progressAll[collection.id] || {})[ep.file];
       const isActive = ep.file === state.currentFile;
@@ -6818,22 +7173,31 @@
       const prog = p && p.duration
         ? Math.min(1, Math.max(0, p.position / p.duration))
         : 0;
-      return `<li class="ep-row ${isActive ? 'active' : ''} ${done ? 'done' : ''}" data-file="${encodeURIComponent(ep.file)}">
+      return `<li class="ep-row q-row ${isActive ? 'active' : ''} ${done ? 'done' : ''}" data-file="${encodeURIComponent(ep.file)}">
+        <span class="q-grip" title="拖动排序" aria-label="拖动排序">⠿</span>
         <span class="ep-num mono">#${String(ep.order).padStart(2, '0')}</span>
         <div class="ep-body">
           <div class="ep-title">${escapeHtml(ep.title)}</div>
           <div class="ep-meta mono">${formatSize(ep.size)}</div>
           <div class="ep-progress"><span style="width:${(prog * 100).toFixed(1)}%"></span></div>
         </div>
+        <span class="q-moves">
+          <button type="button" class="q-up" title="上移" aria-label="上移">▲</button>
+          <button type="button" class="q-down" title="下移" aria-label="下移">▼</button>
+        </span>
       </li>`;
     }).join('');
     audioEpisodeList.innerHTML = rows || '<li class="cards-status mono">（空）</li>';
     for (const row of audioEpisodeList.querySelectorAll('li.ep-row')) {
-      row.addEventListener('click', () => {
+      row.addEventListener('click', (e) => {
+        // Ignore clicks on the reorder controls — those manipulate the
+        // queue, they don't switch tracks.
+        if (e.target.closest('.q-grip, .q-up, .q-down')) return;
         const f = decodeURIComponent(row.dataset.file);
         navigate('#/c/' + encodeURIComponent(collection.id) + '/play/' + encodeURIComponent(f));
       });
     }
+    wireQueueDragReorder(audioEpisodeList, collection, () => renderAudioEpisodeList(collection));
   }
 
   // ------ lyric loading + rendering ------
@@ -7047,17 +7411,199 @@
   // User-level player modes (loopMode / loopAllMode / shuffleMode)
   // keep working on the NARROWED pool, so "list loop + scope =
   // Season 1" loops back to S01E01 after S01E12, not across seasons.
-  function scopedEpisodes(collection) {
-    const eps = collection && collection.episodes ? collection.episodes : [];
-    let filtered = state.specifiedPlayScope == null
-      ? eps
-      : eps.filter((e) => parentDirOf(e.file) === state.specifiedPlayScope);
-    // Apply per-collection episode sort preference to navigation order.
-    if (collection && collection.id) {
-      const pref = getEpSortPref(collection.id);
-      filtered = sortEpisodes(filtered, pref.field, pref.asc);
+  /**
+   * @brief (Re)build the session play queue for a collection.
+   * @details Seeds the queue from the current sort preference + chain
+   *          gluing, capturing just the ordered file keys. Called when a
+   *          collection starts playing and whenever its sort changes.
+   * @param collection The collection now playing.
+   */
+  function buildPlayQueue(collection) {
+    if (!collection || !collection.id) { state.playQueue = null; return; }
+    const pref = getEpSortPref(collection.id);
+    const ordered = sortEpisodes(collection.episodes, pref.field, pref.asc);
+    state.playQueue = { colId: collection.id, order: ordered.map((e) => e.file) };
+  }
+
+  /**
+   * @brief Episodes of a collection in current play-queue order.
+   * @details Lazily builds the queue if absent or belonging to another
+   *          collection. Reconciles against the live episode set: files
+   *          missing from disk drop out, and freshly-added files are
+   *          appended in their sorted+chained position — all without
+   *          discarding the user's manual arrangement.
+   * @param collection The collection to order.
+   * @return Episode objects in play-queue order (full collection, scope
+   *         filtering is applied separately by scopedEpisodes).
+   */
+  function orderedEpisodes(collection) {
+    if (!collection || !collection.episodes) return [];
+    if (!state.playQueue || state.playQueue.colId !== collection.id) {
+      buildPlayQueue(collection);
     }
-    return filtered;
+    const byFile = new Map(collection.episodes.map((e) => [e.file, e]));
+    const out = [];
+    const seen = new Set();
+    for (const f of state.playQueue.order) {
+      const ep = byFile.get(f);
+      if (ep && !seen.has(f)) { out.push(ep); seen.add(f); }
+    }
+    if (seen.size !== collection.episodes.length) {
+      const pref = getEpSortPref(collection.id);
+      for (const ep of sortEpisodes(collection.episodes, pref.field, pref.asc)) {
+        if (!seen.has(ep.file)) { out.push(ep); seen.add(ep.file); }
+      }
+      state.playQueue.order = out.map((e) => e.file);
+    }
+    return out;
+  }
+
+  /**
+   * @brief Commit a new manual order for the play queue.
+   * @details Re-glues chains (applyChains) so every tail still trails its
+   *          head, then stores the resulting file-key order. Because
+   *          next/prev read scopedEpisodes (which reads the queue), the
+   *          playback order updates immediately with no extra wiring.
+   * @param collection The collection the queue belongs to.
+   * @param files      The desired order as a list of file keys.
+   */
+  function setPlayQueueOrder(collection, files) {
+    if (!collection || !collection.episodes) return;
+    const byFile = new Map(collection.episodes.map((e) => [e.file, e]));
+    const eps = files.map((f) => byFile.get(f)).filter(Boolean);
+    const glued = applyChains(eps);
+    state.playQueue = { colId: collection.id, order: glued.map((e) => e.file) };
+  }
+
+  function scopedEpisodes(collection) {
+    // Base order comes from the session play queue (which is itself
+    // seeded from the sort preference + chains and then user-reorderable),
+    // so prev/next always follow whatever the user sees in the queue UI.
+    const eps = orderedEpisodes(collection);
+    if (state.specifiedPlayScope == null) return eps;
+    return eps.filter((e) => parentDirOf(e.file) === state.specifiedPlayScope);
+  }
+
+  /**
+   * @brief Generic pointer-based row reordering for an episode list.
+   * @details Uses Pointer Events rather than HTML5 drag-and-drop so it
+   *          behaves identically on touch and mouse (HTML5 DnD does not
+   *          fire on touch — the cause of the old "drag does nothing on
+   *          phone" bug). A drag begins only from a .q-grip handle, so a
+   *          normal tap on the row still does its default action (play /
+   *          select). The DOM is reordered live; on release the resulting
+   *          file-key order is read back and handed to onCommit.
+   *
+   *          Grip listeners are bound per-element. The grips are recreated
+   *          on every render, so their listeners are discarded with the
+   *          old DOM — no accumulation across re-renders.
+   * @param listEl   The <ul> whose li.ep-row[data-file] children reorder.
+   * @param onCommit Receives the new ordered array of file keys.
+   */
+  function wirePointerReorder(listEl, onCommit) {
+    const readOrder = () => Array.from(listEl.querySelectorAll('li.ep-row[data-file]'))
+      .map((r) => decodeURIComponent(r.dataset.file));
+    let dragRow = null;      // the row actively being dragged
+    let pending = null;      // a mouse press on the row body, awaiting threshold
+    let startX = 0, startY = 0;
+    const THRESHOLD = 5;     // px of movement before a body press becomes a drag
+
+    const reorderTo = (clientY) => {
+      const others = Array.from(listEl.querySelectorAll('li.ep-row[data-file]'))
+        .filter((r) => r !== dragRow);
+      for (const r of others) {
+        const rect = r.getBoundingClientRect();
+        if (clientY < rect.top + rect.height / 2) { listEl.insertBefore(dragRow, r); return; }
+      }
+      listEl.appendChild(dragRow);
+    };
+    const onMove = (ev) => {
+      // Promote a pending body-press to an active drag once it moves enough.
+      if (pending && !dragRow) {
+        if (Math.abs(ev.clientY - startY) < THRESHOLD && Math.abs(ev.clientX - startX) < THRESHOLD) return;
+        dragRow = pending; pending = null;
+        dragRow.classList.add('dragging');
+      }
+      if (!dragRow) return;
+      ev.preventDefault();
+      reorderTo(ev.clientY);
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      pending = null;
+      if (!dragRow) return;          // press without enough movement → was a click
+      dragRow.classList.remove('dragging');
+      dragRow = null;
+      // Swallow the click the browser fires after the drop so the row's
+      // play/navigate handler doesn't trigger on release. Self-removing,
+      // with a timeout in case no click follows.
+      const killClick = (ev) => {
+        ev.stopPropagation(); ev.preventDefault();
+        document.removeEventListener('click', killClick, true);
+      };
+      document.addEventListener('click', killClick, true);
+      setTimeout(() => document.removeEventListener('click', killClick, true), 350);
+      onCommit(readOrder());
+    };
+    const startDrag = (row) => {
+      dragRow = row;
+      dragRow.classList.add('dragging');
+      document.addEventListener('pointermove', onMove, { passive: false });
+      document.addEventListener('pointerup', onUp);
+    };
+    // Grip handle: immediate drag — the touch-friendly path (touch-action
+    // :none on .q-grip keeps the gesture from scrolling the list).
+    for (const grip of listEl.querySelectorAll('.q-grip')) {
+      grip.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const row = grip.closest('li.ep-row[data-file]');
+        if (row) startDrag(row);
+      });
+    }
+    // Whole-row drag on desktop: a left-button press anywhere on the row
+    // body starts a drag once it moves past THRESHOLD; a press without
+    // movement remains a normal click (play). Touch is intentionally
+    // excluded here so a finger can still scroll the list — touch reorders
+    // via the grip. Presses on interactive children are ignored.
+    for (const row of listEl.querySelectorAll('li.ep-row[data-file]')) {
+      row.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'mouse' || e.button !== 0) return;
+        if (e.target.closest('.q-grip, .q-up, .q-down, .ep-submenu-btn, button, a, input, select')) return;
+        pending = row; startX = e.clientX; startY = e.clientY;
+        document.addEventListener('pointermove', onMove, { passive: false });
+        document.addEventListener('pointerup', onUp);
+      });
+    }
+  }
+
+  /**
+   * @brief Attach reordering to the session play-queue list.
+   * @details Grip drag (via wirePointerReorder) plus .q-up / .q-down tap
+   *          fallback. Every commit re-glues chains (setPlayQueueOrder)
+   *          and redraws; next/prev follow automatically via scopedEpisodes.
+   * @param listEl     The queue <ul>.
+   * @param collection The collection the queue belongs to.
+   * @param rerender   Callback that redraws the list after a commit.
+   */
+  function wireQueueDragReorder(listEl, collection, rerender) {
+    const commit = (files) => { setPlayQueueOrder(collection, files); rerender(); };
+    // Up/down tap fallback, bound per-button (fresh each render).
+    for (const btn of listEl.querySelectorAll('.q-up, .q-down')) {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const row = btn.closest('li.ep-row[data-file]');
+        if (!row) return;
+        if (btn.classList.contains('q-up') && row.previousElementSibling) {
+          listEl.insertBefore(row, row.previousElementSibling);
+        } else if (btn.classList.contains('q-down') && row.nextElementSibling) {
+          listEl.insertBefore(row.nextElementSibling, row);
+        } else { return; }
+        commit(Array.from(listEl.querySelectorAll('li.ep-row[data-file]')).map((r) => decodeURIComponent(r.dataset.file)));
+      });
+    }
+    wirePointerReorder(listEl, commit);
   }
 
   // Pick the next/prev track within an explicit (collection, file)
@@ -7165,6 +7711,7 @@
   const amstLyricMask = document.getElementById('amst-lyric-mask');
   const amstLyricClose = document.getElementById('amst-lyric-close');
   const amstQueueMask = document.getElementById('amst-queue-mask');
+  const sleepSheetMask = document.getElementById('sleep-sheet-mask');
 
   // Format `currentTime` / `duration` to "m:ss" or "h:mm:ss". Reuses
   // the existing formatTime helper for consistency with the desktop
@@ -7254,8 +7801,10 @@
   // ── Sleep: open the existing popover ──
   if (amst.sleep && audioSleepBtn) {
     amst.sleep.addEventListener('click', (e) => {
-      // Reuse the existing button's click logic by anchoring the
-      // popover to the mobile button instead.
+      // Delegate to the desktop button's handler, which detects the
+      // phone-width viewport and opens the panel as a bottom sheet
+      // (see openSleepPopover). stopPropagation keeps the document-level
+      // outside-click closer from immediately dismissing it.
       audioSleepBtn.click();
       e.stopPropagation();
     });
@@ -7448,33 +7997,76 @@
     try { syncAmstControls(); } catch (_e) {}
   }
   if (audioSleepBtn && sleepPopover) {
-    audioSleepBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      sleepPopover.hidden = !sleepPopover.hidden;
-      if (!sleepPopover.hidden) {
+    /**
+     * @brief Whether the sleep popover should render as a mobile bottom
+     *        sheet rather than a desktop anchored popover.
+     * @details Mirrors the ≤600px breakpoint used by the mobile audio
+     *          stage CSS so the JS positioning logic and the stylesheet
+     *          stay in agreement.
+     * @return true on phone-width viewports.
+     */
+    function sleepIsMobile() {
+      return window.matchMedia('(max-width: 600px)').matches;
+    }
+
+    /**
+     * @brief Reveal the sleep-timer panel.
+     * @details Desktop: anchors the panel under the sleep button via
+     *          getBoundingClientRect. Mobile: clears those inline offsets
+     *          (so the bottom-sheet CSS in the ≤600px media query takes
+     *          over) and shows the dim backdrop. The inline styles MUST be
+     *          cleared on mobile, otherwise a stale desktop top/right left
+     *          over from a prior open (e.g. after a viewport resize) would
+     *          beat the stylesheet and push the sheet off-screen again.
+     */
+    function openSleepPopover() {
+      sleepPopover.hidden = false;
+      if (sleepIsMobile()) {
+        sleepPopover.style.top = '';
+        sleepPopover.style.right = '';
+        sleepPopover.style.left = '';
+        if (sleepSheetMask) sleepSheetMask.hidden = false;
+      } else {
+        if (sleepSheetMask) sleepSheetMask.hidden = true;
         const r = audioSleepBtn.getBoundingClientRect();
         sleepPopover.style.top = (r.bottom + 6) + 'px';
         sleepPopover.style.right = (window.innerWidth - r.right) + 'px';
       }
+    }
+
+    /**
+     * @brief Hide the sleep-timer panel and its mobile backdrop.
+     */
+    function closeSleepPopover() {
+      sleepPopover.hidden = true;
+      if (sleepSheetMask) sleepSheetMask.hidden = true;
+    }
+
+    audioSleepBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (sleepPopover.hidden) openSleepPopover();
+      else closeSleepPopover();
     });
+    // Tapping the dim backdrop dismisses the mobile bottom sheet.
+    if (sleepSheetMask) sleepSheetMask.addEventListener('click', closeSleepPopover);
     sleepPopover.addEventListener('click', (e) => {
       const preset = e.target.closest('[data-sleep-min]');
       if (preset) {
         const m = Number(preset.dataset.sleepMin);
-        if (Number.isFinite(m) && m > 0) { startSleepTimer(m); sleepPopover.hidden = true; }
+        if (Number.isFinite(m) && m > 0) { startSleepTimer(m); closeSleepPopover(); }
         return;
       }
       if (e.target.id === 'sleep-custom-btn') {
         const input = document.getElementById('sleep-custom-min');
         const m = Number(input && input.value);
-        if (Number.isFinite(m) && m > 0 && m <= 720) { startSleepTimer(m); sleepPopover.hidden = true; }
+        if (Number.isFinite(m) && m > 0 && m <= 720) { startSleepTimer(m); closeSleepPopover(); }
         else toast('请输入 1-720 分钟', 'error');
         return;
       }
       if (e.target.id === 'sleep-cancel-btn' || e.target.closest('#sleep-cancel-btn')) {
         cancelSleepTimer();
         toast('已取消定时');
-        sleepPopover.hidden = true;
+        closeSleepPopover();
         return;
       }
       const modeInput = e.target.closest('input[name="sleep-mode"]');
@@ -7484,7 +8076,8 @@
     document.addEventListener('click', (e) => {
       if (sleepPopover.hidden) return;
       if (sleepPopover.contains(e.target) || e.target === audioSleepBtn || audioSleepBtn.contains(e.target)) return;
-      sleepPopover.hidden = true;
+      if (sleepSheetMask && e.target === sleepSheetMask) return; // its own handler closes
+      closeSleepPopover();
     });
   }
 
@@ -12168,6 +12761,117 @@
   function encodePath(p) {
     return String(p || '').split('/').map(encodeURIComponent).join('/');
   }
+  /**
+   * @brief Build the audio HiFi streaming URL.
+   *
+   *        Always returns `/audio-stream/<id>/<file>` regardless of
+   *        codec — the server-side router decides whether to redirect
+   *        to /audio-files (byte-range native) or to spawn ffmpeg for
+   *        fmp4-fLaC / DSD-to-FLAC / Opus fallback. Centralizing the
+   *        prefix here lets future changes route legacy callers en
+   *        masse.
+   *
+   *        Mirror logic of mediaUrl for the virtual-collection re-
+   *        resolution: "__all_audio__" etc. carry _collectionId on
+   *        each episode.
+   */
+  function audioStreamUrl(id, file) {
+    let resolvedId = id;
+    if (
+      (id === '__all_audio__' || id === '__liked_audio__')
+      && state.currentCollection
+      && state.currentCollection._virtual
+    ) {
+      const ep = state.currentCollection.episodes.find((e) => e.file === file);
+      if (ep && ep._collectionId) resolvedId = ep._collectionId;
+    }
+    return '/audio-stream/' + encodeURIComponent(resolvedId) + '/' + encodePath(file);
+  }
+
+  /**
+   * @brief Build the fragmented-MP4 MSE streaming URL for video.
+   *
+   *        Used by the v1.9.0 ChiralVideoMse controller when the
+   *        server-side decideVideoRoute returns 'fmp4-mse'. The URL
+   *        intentionally omits ?t= and &sid= — the controller adds
+   *        them on each fetch (initial t=0, then ?t=<seek> on every
+   *        user-initiated seek).
+   */
+  function fmp4StreamUrl(id, file, audioStreamIndex) {
+    let url = '/api/episode/' + encodeURIComponent(id)
+      + '/fmp4-stream?file=' + encodeURIComponent(file);
+    // Optional `&a=<absolute ffprobe stream index>` — picks a specific
+    // audio track. Server's /api/episode/:id/fmp4-stream handler will
+    // map this stream via `-map 0:N` when spawning ffmpeg. Used by
+    // switchHlsAudio's fmp4-mse branch (v1.11.0+) to swap languages.
+    if (
+      typeof audioStreamIndex === 'number'
+      && Number.isInteger(audioStreamIndex)
+      && audioStreamIndex >= 0
+    ) {
+      url += '&a=' + audioStreamIndex;
+    }
+    return url;
+  }
+
+  /**
+   * @brief Render the HiFi audio metadata badge for an episode.
+   *
+   *        Uses ep.mediaInfo (populated by lib/audio.js scanAudioMeta
+   *        and surfaced via lib/collections.js buildEpisodes) to show
+   *        codec, bit depth, sample rate, channels, bitrate, and a
+   *        "无损" pill for lossless codecs. Falls back to the legacy
+   *        "#01 · FLAC · 25 MB" line when mediaInfo is absent (first
+   *        boot, scan-pending, or v1 schema episode).
+   *
+   *        Returned as HTML so the lossless pill can be a styled
+   *        <span class="hifi-badge lossless">. Caller must use
+   *        .innerHTML, not .textContent.
+   */
+  function formatAudioHiFiBadge(ep) {
+    if (!ep) return '';
+    const mi = ep.mediaInfo;
+    const fallback = () => [
+      '#' + String(ep.order || 0).padStart(2, '0'),
+      escapeHtml((ep.ext || '').toUpperCase()),
+      escapeHtml(formatSize(ep.size)),
+    ].join(' · ');
+    if (!mi || mi.error || !Array.isArray(mi.audio) || mi.audio.length === 0) {
+      return fallback();
+    }
+    const a = mi.audio[0];
+    if (!a || !a.codec) return fallback();
+    let codec = String(a.codec).toUpperCase();
+    if (codec === 'PCM_S16LE' || codec === 'PCM_S24LE' || codec === 'PCM_S32LE'
+      || codec === 'PCM_S16BE' || codec === 'PCM_S24BE' || codec === 'PCM_S32BE'
+      || codec.startsWith('PCM_F')) {
+      codec = 'PCM';
+    } else if (codec.startsWith('DSD_')) {
+      codec = 'DSD';
+    } else if (codec === 'MP4A' || codec === 'MP4A-40-2') {
+      codec = 'AAC';
+    }
+    const parts = [];
+    let spec = codec;
+    if (a.bitDepth) spec += ' ' + a.bitDepth + 'bit';
+    if (a.sampleRate) {
+      const khz = a.sampleRate / 1000;
+      spec += (a.bitDepth ? '/' : ' ') + (Number.isInteger(khz) ? khz : khz.toFixed(1)) + 'kHz';
+    }
+    parts.push(escapeHtml(spec));
+    if (a.channels) parts.push(escapeHtml(a.channels + 'ch'));
+    if (a.bitrate && a.bitrate > 0) {
+      parts.push(escapeHtml(Math.round(a.bitrate / 1000) + 'kbps'));
+    }
+    let html = parts.join(' · ');
+    if (a.lossless) {
+      html += ' <span class="hifi-badge lossless">无损</span>';
+    } else {
+      html += ' <span class="hifi-badge lossy">有损</span>';
+    }
+    return html;
+  }
+
   function mediaUrl(id, file) {
     const base = state.kind === 'image' ? '/image-files'
                : state.kind === 'audio' ? '/audio-files'
@@ -12226,7 +12930,13 @@
   // "resume from progress" and mid-playback seeks for non-seekable
   // transcoded streams.
   function videoSrcFor(id, file, opts) {
-    const startSec = (opts && opts.startSec) || 0;
+    const o = opts || {};
+    const startSec = o.startSec || 0;
+    const audioStreamIndex = (
+      typeof o.audioStreamIndex === 'number'
+      && Number.isInteger(o.audioStreamIndex)
+      && o.audioStreamIndex >= 0
+    ) ? o.audioStreamIndex : null;
     // 1.7.36 added opts.forceStream so callers can override the
     // ext-only native check. Use case: showPlayer's audio-codec
     // probe (1.7.35) detects EAC3/DTS/TrueHD/MLP audio inside an
@@ -12234,16 +12944,23 @@
     // /media to /media-stream so ffmpeg transcodes the unsupported
     // audio. Without this flag, the URL builder still saw `.mkv`
     // and returned the static /media URL — ep would play silent.
-    const forceStream = !!(opts && opts.forceStream);
+    const forceStream = !!o.forceStream;
     // Extension detection must look at the BARE filename, not the full
     // relative path — "Season 1/S01E01.mp4" has ext "mp4", not "1/S01E01.mp4".
     const bare = (file || '').split('/').pop();
     const ext = bare.split('.').pop();
-    if (!forceStream && !needsTranscode(ext)) {
+    if (!forceStream && !needsTranscode(ext) && audioStreamIndex == null) {
       return '/media/' + encodeURIComponent(id) + '/' + encodePath(file);
     }
-    const base = '/media-stream/' + encodeURIComponent(id) + '/' + encodePath(file);
-    return startSec > 0 ? base + '?t=' + Math.floor(startSec) : base;
+    let base = '/media-stream/' + encodeURIComponent(id) + '/' + encodePath(file);
+    const params = [];
+    if (startSec > 0) params.push('t=' + Math.floor(startSec));
+    // v1.11.0+ pass audio index when caller specified one. Server's
+    // /media-stream handler (line ~533) reads ?a= and forwards it
+    // through ffmpeg.streamTo → mixedArgs → -map 0:N.
+    if (audioStreamIndex != null) params.push('a=' + audioStreamIndex);
+    if (params.length) base += '?' + params.join('&');
+    return base;
   }
   // Client-side mirror of server.js's VIDEO_MIME map. Used when handing
   // sources to Plyr's quality switcher — Plyr wants a valid `type` hint
@@ -12328,6 +13045,14 @@
     if (state.hls) {
       try { state.hls.destroy(); } catch (_e) {}
       state.hls = null;
+    }
+    // v1.11.0 — also tear down the fmp4-mse controller on the same
+    // disposal path. Two pipelines feeding the same <video> element
+    // is the most common cause of "no audio after switching ep" or
+    // "stale frames at the start" in mixed-codec libraries.
+    if (state.videoMse) {
+      try { state.videoMse.destroy(); } catch (_e) {}
+      state.videoMse = null;
     }
   }
 
@@ -12838,6 +13563,104 @@
   }
 
   /**
+   * @brief v1.11.0 — attach the ChiralVideoMse controller to <video>
+   *        for the fmp4-mse zero-wait video lane.
+   *
+   *        Resolves once the first SourceBuffer has data (the
+   *        controller's `onPlayable` callback). Rejects on any
+   *        fmp4-mse failure so the caller can fall back to HLS.
+   *
+   *        Tears down any prior hls.js or ChiralVideoMse instance to
+   *        prevent two pipelines feeding the same <video> element.
+   *
+   *        Requires ChiralVideoMse + MP4Box to be loaded (index.html
+   *        loads them before app.js). When either is missing
+   *        synchronously throws so the caller picks HLS immediately.
+   *
+   * @param {string} streamBaseUrl Full URL to /api/episode/:id/fmp4-stream?file=...
+   * @param {string} sessionId     Per-tab disambiguator. Empty string is OK.
+   * @returns {Promise<void>} resolves when video has its first frame.
+   */
+  /**
+   * @brief Invoke play() and swallow the Promise reject ifs the browser
+   *        decides the request was interrupted (AbortError).
+   *
+   *        HTMLMediaElement.play() returns a Promise that rejects with
+   *        AbortError when the browser preempts it — e.g. a new
+   *        `src` assignment, a `pause()` call from JS, a seek before
+   *        the first frame decodes. The MSE pipeline rebuilds its
+   *        MediaSource on every seek-restart, which sets a new
+   *        blob: URL into <video>.src; that triggers the abort and
+   *        the orphaned Promise prints as an "Uncaught (in promise)"
+   *        in DevTools. Wrapping every play() through this helper
+   *        keeps the console clean and avoids confusing users who
+   *        glance at the error overlay.
+   */
+  function safePlay() {
+    try {
+      const p = state.plyr ? state.plyr.play() : player.play();
+      if (p && typeof p.catch === 'function') p.catch(function () { /* swallow */ });
+    } catch (_e) { /* swallow */ }
+  }
+
+  async function attachFmp4Mse(streamBaseUrl, sessionId, startSec) {
+    // Dispose prior pipelines.
+    if (state.hls) {
+      try { state.hls.destroy(); } catch (_e) {}
+      state.hls = null;
+    }
+    if (state.videoMse) {
+      try { state.videoMse.destroy(); } catch (_e) {}
+      state.videoMse = null;
+    }
+    if (typeof window.ChiralVideoMse === 'undefined' || typeof window.MP4Box === 'undefined') {
+      throw new Error('fmp4-mse-unavailable');
+    }
+    const startAt = Number(startSec) > 0 ? Number(startSec) : 0;
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      // Hard 8s timeout. If mp4box doesn't reach onPlayable in that
+      // window the source bitstream is most likely something its
+      // demuxer can't handle (PTS inconsistencies, weird codec
+      // params, container quirks — Redline.mkv being the canonical
+      // case). Rejecting here lets the caller fall back to the
+      // fmp4-streamTo lane (plain <video src>) instead of leaving
+      // the loading overlay spinning forever with no error in the
+      // console (the silent-failure mode the user hit on Redline).
+      const timeoutHandle = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        if (state.videoMse) {
+          try { state.videoMse.destroy(); } catch (_e) {}
+          state.videoMse = null;
+        }
+        reject(new Error('fmp4-mse:timeout'));
+      }, 8000);
+      const onError = (tag) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutHandle);
+        // Cleanup the half-initialized controller before rejecting so
+        // the caller starting the fallback path doesn't race with
+        // stale appendBuffer calls.
+        if (state.videoMse) {
+          try { state.videoMse.destroy(); } catch (_e) {}
+          state.videoMse = null;
+        }
+        reject(new Error('fmp4-mse:' + tag));
+      };
+      const onPlayable = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeoutHandle);
+        resolve();
+      };
+      state.videoMse = new ChiralVideoMse(player, { onError, onPlayable });
+      state.videoMse.start(streamBaseUrl, sessionId || '', startAt);
+    });
+  }
+
+  /**
    * @brief Switch the HLS audio rendition to a different absolute
    *        ffprobe stream index. The server caches per (cid|file|a)
    *        so the first switch to a given language pays the ffmpeg
@@ -12863,6 +13686,97 @@
       catch (_e) { return 0; }
     })();
     showPlayerLoading('切换音轨…');
+
+    // v1.11.1 audio-switch fallback ladder (mirrors playEpisode):
+    //
+    //   step 1: fmp4-mse with &a=<newStreamIdx>  — DISABLED by default
+    //   step 2: fmp4-streamTo with ?a=<newStreamIdx>  ← default
+    //   step 3: HLS with new audioStreamIndex (legacy queue path)
+    //
+    // Step 1 only runs when state.videoMse exists (set by the
+    // playEpisode fmp4-mse success path), which currently never
+    // happens because playEpisode defaults to fmp4-streamTo too.
+    // The branch is preserved for the future toggle.
+    //
+    // Step 2 NEVER enqueues server-side HLS. The /media-stream
+    // endpoint is request-scoped: ffmpeg spawns, streams, exits when
+    // the response closes. No background ffmpeg lingers, no toast
+    // about "transcoding in queue" — the user just sees the picture
+    // briefly switch then continue with the new language.
+
+    // ----- Step 1: fmp4-mse with new audio idx -----
+    if (state.videoMse) {
+      try {
+        const newStreamUrl = fmp4StreamUrl(cid, epFile, newStreamIdx);
+        await attachFmp4Mse(newStreamUrl, '', wasTime);
+        state.currentHlsAudioIdx = newStreamIdx;
+        hidePlayerLoading();
+        const onCanPlay = () => {
+          try { if (state.plyr) state.plyr.speed = state.playerSpeed; } catch (_e) {}
+          safePlay();
+        };
+        if (state.plyr) state.plyr.once('canplay', onCanPlay);
+        else player.addEventListener('canplay', onCanPlay, { once: true });
+        if (window.console && window.console.info) {
+          window.console.info('[switchHlsAudio] fmp4-mse switched to a=' + newStreamIdx);
+        }
+        return;
+      } catch (e) {
+        if (window.console && window.console.warn) {
+          window.console.warn(
+            '[switchHlsAudio] fmp4-mse switch failed (' + (e && e.message) + '), trying fmp4-streamTo'
+          );
+        }
+      }
+    }
+
+    // ----- Step 2: fmp4-streamTo with ?a=<newStreamIdx> -----
+    // No HLS queue involvement. Server's /media-stream endpoint
+    // (line ~506 in server.js) reads ?a= and forwards to
+    // ffmpeg.streamTo → mixedArgs → -map 0:<idx>.
+    try {
+      disposeHls(); // tear down any prior pipeline
+      // v1.11.1: flag state.currentIsStream so seek-on-streamTo
+      // (line ~13431 player.seeking listener) translates user
+      // jumps into a fresh /media-stream?t= request. Without this
+      // the player would stall on every fast-forward.
+      state.currentIsStream = true;
+      state.streamStartSec = wasTime > 1 ? wasTime : 0;
+      const streamToUrl = videoSrcFor(cid, epFile, {
+        forceStream: true,
+        startSec: wasTime > 1 ? wasTime : 0,
+        audioStreamIndex: newStreamIdx,
+      });
+      state.currentHlsAudioIdx = newStreamIdx;
+      const onCanPlay = () => {
+        hidePlayerLoading();
+        try { if (state.plyr) state.plyr.speed = state.playerSpeed; } catch (_e) {}
+        safePlay();
+      };
+      if (state.plyr) {
+        state.plyr.source = {
+          type: 'video',
+          sources: [{ src: streamToUrl, type: 'video/mp4' }],
+        };
+        state.plyr.once('canplay', onCanPlay);
+      } else {
+        player.src = streamToUrl;
+        try { player.load(); } catch (_e) {}
+        player.addEventListener('canplay', onCanPlay, { once: true });
+      }
+      if (window.console && window.console.info) {
+        window.console.info('[switchHlsAudio] fmp4-streamTo switched to a=' + newStreamIdx);
+      }
+      return;
+    } catch (e) {
+      if (window.console && window.console.warn) {
+        window.console.warn(
+          '[switchHlsAudio] fmp4-streamTo switch failed (' + (e && e.message) + '), falling back to HLS'
+        );
+      }
+    }
+
+    // ----- Step 3: HLS (legacy bail-out, may enqueue server queue) -----
     let newKey = null;
     let pendingDetail = null;
     try {
@@ -12899,10 +13813,7 @@
         } catch (_e) {}
       }
       try { if (state.plyr) state.plyr.speed = state.playerSpeed; } catch (_e) {}
-      try {
-        if (state.plyr) state.plyr.play();
-        else player.play();
-      } catch (_e) {}
+      safePlay();
     };
     if (state.plyr) state.plyr.once('canplay', onCanPlay);
     else player.addEventListener('canplay', onCanPlay, { once: true });
@@ -12943,11 +13854,21 @@
     // .mkv as native-eligible and built a /media URL — that broke
     // the seek (the static URL doesn't accept ?t= and would just
     // restart playback from the beginning of the original file).
-    const newSrc = videoSrcFor(col.id, file, { startSec: absTarget, forceStream: state.currentIsStream });
+    // v1.11.1: preserve audio track selection across seek-restart.
+    // state.currentHlsAudioIdx is set by switchHlsAudio (line ~13352)
+    // when the user picks a non-default language; without forwarding
+    // it here, every seek would silently revert to the default audio
+    // and the user would have to re-pick after each scrub.
+    const newSrc = videoSrcFor(col.id, file, {
+      startSec: absTarget,
+      forceStream: state.currentIsStream,
+      audioStreamIndex: state.currentHlsAudioIdx,
+    });
     const onMeta = () => {
       player.removeEventListener('loadedmetadata', onMeta);
       streamSeekBusy = false;
-      try { player.play(); } catch (e) {}
+      const p = player.play();
+      if (p && typeof p.catch === 'function') p.catch(function () { /* swallow */ });
     };
     player.addEventListener('loadedmetadata', onMeta);
     player.src = newSrc;

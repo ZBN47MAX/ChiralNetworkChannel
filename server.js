@@ -24,6 +24,14 @@ const auth = require('./lib/auth');
 const albumArt = require('./lib/album-art');
 const ffmpeg = require('./lib/ffmpeg');
 const systemLoad = require('./lib/system-load');
+// v1.9.0 HiFi / zero-wait stack. All three modules are pure (no global
+// state at require time); they're loaded eagerly so server.js can wire
+// the new routes alongside the legacy /media-stream / /api/hls-start
+// endpoints in the same boot pass.
+const probeCache = require('./lib/probe-cache');
+const mediaRoute = require('./lib/media-route');
+const fmp4Stream = require('./lib/fmp4-stream');
+const concurrency = require('./lib/concurrency');
 
 const VERSION = require('./version.json').version;
 const BOOT_TIME = Date.now();
@@ -122,6 +130,7 @@ function errorStatus(err) {
   if (err.code === 'E_COLLECTION_NOT_EMPTY') return 409;
   if (err.code === 'E_COLLECTION_PROTECTED') return 403;
   if (err.code === 'E_EPISODE_NOT_FOUND') return 404;
+  if (err.code === 'E_FOLLOW_TAKEN' || err.code === 'E_FOLLOW_CYCLE') return 409;
   if (err.code.startsWith('E_INVALID_')) return 400;
   return 500;
 }
@@ -523,8 +532,17 @@ async function boot() {
     }
 
     const startSec = Math.max(0, Number(req.query.t) || 0);
+    // v1.11.0+ — `?a=<absolute stream idx>` selects a specific audio
+    // track. Used by the multi-audio picker's fmp4-streamTo fallback
+    // path when fmp4-mse is unavailable. Out-of-range / non-numeric
+    // → null = ffmpeg's default first-audio behavior.
+    let audioStreamIndex = null;
+    if (req.query.a != null && String(req.query.a).length > 0) {
+      const n = Number(req.query.a);
+      if (Number.isInteger(n) && n >= 0) audioStreamIndex = n;
+    }
     try {
-      await ffmpeg.streamTo(fileAbs, res, { startSec });
+      await ffmpeg.streamTo(fileAbs, res, { startSec, audioStreamIndex });
     } catch (e) {
       // streamTo handles its own error paths (destroys the response on
       // spawn failure), so this catch is only for programming errors.
@@ -1246,6 +1264,192 @@ async function boot() {
     });
   });
 
+  // ============================================================
+  // v1.9.0 client capability registry
+  // ============================================================
+  //
+  // public/capability.js POSTs `navigator.mediaCapabilities` probe
+  // results here at session start. We cache by session id (or by
+  // remote IP if there's no session yet) and feed the cached caps
+  // into mediaRoute.decideVideoRoute / decideAudioRoute on later
+  // requests. Memory-only — restarts drop the table and the client
+  // re-probes on next page load.
+  //
+  // Shape of the persisted record:
+  //   { hevc, av1, vp9, mkv, fmp4flac, fmp4alac, mseFmp4Streaming,
+  //     isIOS, lastSeenAt }
+  //
+  // Missing keys default to false in mediaRoute. Unknown extra keys
+  // are stored verbatim so future capability flags (e.g. hdr10plus)
+  // can be rolled out from the client side without a server change.
+  const clientCapsByKey = new Map();
+  const CLIENT_CAPS_TTL_MS = 24 * 60 * 60 * 1000;
+
+  /**
+   * @brief Build the lookup key for the capability cache.
+   *
+   *        Session id when authenticated, remote IP otherwise. The
+   *        latter is best-effort and only used for the brief window
+   *        between page load and first authenticated request. Once
+   *        the user logs in, the session key becomes the canonical
+   *        record.
+   */
+  function clientCapsKey(req) {
+    const sid = req.session && req.session.sid;
+    if (sid) return 'sid:' + sid;
+    const ip = req.ip || (req.connection && req.connection.remoteAddress) || 'unknown';
+    return 'ip:' + String(ip);
+  }
+
+  /**
+   * @brief Read the cached capabilities for a request, with iOS UA
+   *        detection layered on top.
+   *
+   *        The isIOS flag is derived server-side from the User-Agent
+   *        rather than trusted from the client probe — iOS Safari is
+   *        prone to lying about MSE support and we don't want a
+   *        broken client report to send the user down the fmp4-mse
+   *        path that ends in silent failure.
+   */
+  function getClientCaps(req) {
+    const key = clientCapsKey(req);
+    const rec = clientCapsByKey.get(key);
+    const caps = (rec && (Date.now() - rec.lastSeenAt) < CLIENT_CAPS_TTL_MS)
+      ? rec
+      : {};
+    const ua = String(req.get && req.get('user-agent') || req.headers['user-agent'] || '');
+    const isIOS = /\b(iPhone|iPad|iPod)\b/.test(ua) || /CPU (?:iPhone )?OS \d+/.test(ua);
+    return Object.assign({}, caps, { isIOS });
+  }
+
+  app.post('/api/client-caps', express.json({ limit: '4kb' }), (req, res) => {
+    const body = req.body || {};
+    const sanitized = {};
+    // Whitelist the known flags + accept additional booleans for
+    // future-proofing. Numeric / string fields are dropped to keep
+    // the table predictable.
+    const KNOWN = [
+      'hevc', 'av1', 'vp9', 'mkv',
+      'fmp4flac', 'fmp4alac', 'fmp4opus',
+      'mseFmp4Streaming',
+    ];
+    for (const k of KNOWN) {
+      if (typeof body[k] === 'boolean') sanitized[k] = body[k];
+    }
+    // Also accept additional boolean fields the client wants to
+    // report; restricted to short alphanumeric keys to prevent
+    // arbitrary-property pollution.
+    for (const k of Object.keys(body)) {
+      if (KNOWN.indexOf(k) !== -1) continue;
+      if (!/^[a-zA-Z][a-zA-Z0-9_]{0,31}$/.test(k)) continue;
+      if (typeof body[k] === 'boolean') sanitized[k] = body[k];
+    }
+    sanitized.lastSeenAt = Date.now();
+    clientCapsByKey.set(clientCapsKey(req), sanitized);
+    res.json({ ok: true });
+  });
+
+  // ============================================================
+  // v1.9.0 fmp4-mse video stream — zero-wait replacement for HLS
+  // ============================================================
+  //
+  // Non-iOS clients pulling a video that would otherwise need HLS
+  // (multi-channel mkv, EAC3 / DTS / TrueHD audio, exotic container)
+  // hit this endpoint instead. The server pipes a live fragmented
+  // MP4 stream that the client's public/video-mse.js controller
+  // demuxes via mp4box.js and feeds into MediaSource.
+  //
+  // Query string:
+  //   file=<rel>        REQUIRED. Same shape as /api/episode/.../hls-start.
+  //   t=<sec>           Input-seek offset. Default 0. Client passes a
+  //                     new t on every seek; the server SIGKILL's the
+  //                     existing ffmpeg for the same session and
+  //                     respawns from the new keyframe.
+  //   a=<streamIdx>     Optional explicit audio stream selection
+  //                     (multi-audio picker).
+  //   sid=<arbitrary>   Optional per-session disambiguator for clients
+  //                     opening the same episode in two tabs. Defaults
+  //                     to the auth session id.
+  app.get('/api/episode/:id/fmp4-stream', auth.requireAuth, async (req, res) => {
+    req.params[0] = req.query.file || '';
+    const r = resolveEpisodeFile(req);
+    if (r.status) return res.status(r.status).json({ error: r.message });
+
+    const startSec = Math.max(0, Number(req.query.t) || 0);
+    let audioStreamIndex = null;
+    if (req.query.a != null && String(req.query.a).length > 0) {
+      const n = Number(req.query.a);
+      if (Number.isInteger(n) && n >= 0) audioStreamIndex = n;
+    }
+    const sessionId = (req.query.sid && String(req.query.sid))
+      || (req.session && req.session.sid)
+      || 'anon';
+
+    // Cache hit short-circuit: byte-range serve the cached output.mp4
+    // if it exists, bypass ffmpeg entirely. Only valid for from-scratch
+    // requests (t=0) — see lib/fmp4-stream.js tryCacheHit.
+    if (startSec === 0 && audioStreamIndex == null) {
+      if (fmp4Stream.tryCacheHit({
+        absInputPath: r.fileAbs,
+        cacheRoot: config.FMP4_CACHE_DIR,
+        req,
+        res,
+      })) {
+        return; // response already sent
+      }
+    }
+
+    if (!ffmpeg.isReady()) {
+      return res.status(503).json({ error: 'ffmpeg not available' });
+    }
+
+    // Probe up front so the audio-args decision (copy vs encode) is
+    // based on real codec info. probeCache caches the result for
+    // repeat requests; the slot acquire inside is foreground because
+    // a user is waiting on this response.
+    let mediaInfo = null;
+    try {
+      const bin = ffmpeg.getBin();
+      const ffprobePath = bin && bin.ffprobe;
+      if (ffprobePath) {
+        const stat = fs.statSync(r.fileAbs);
+        mediaInfo = await probeCache.getMediaInfo(ffprobePath, r.fileAbs, {
+          mtimeMs: stat.mtimeMs,
+          priority: 'foreground',
+        });
+      }
+    } catch (e) {
+      // Probe failures fall through; lib/fmp4-stream._buildAudioArgs
+      // defaults safely (re-encode AAC + dplii downmix) when mediaInfo
+      // is null.
+      console.warn('[fmp4-stream] probe failed:', e.message);
+    }
+
+    const caps = getClientCaps(req);
+
+    try {
+      await fmp4Stream.streamFmp4({
+        absInputPath: r.fileAbs,
+        res,
+        episodeId: r.id,
+        file: r.file,
+        sessionId,
+        mediaInfo,
+        startSec,
+        audioStreamIndex,
+        canFmp4Flac: !!caps.fmp4flac,
+        downmixPolicy: config.AUDIO_DOWNMIX_DEFAULT,
+        cacheRoot: config.FMP4_CACHE_DIR,
+        fragDurationUs: config.FMP4_FRAG_DURATION_US,
+      });
+    } catch (e) {
+      console.error('[fmp4-stream] spawn failed:', e.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'fmp4 stream failed: ' + e.message });
+      }
+    }
+  });
+
   /**
    * @brief Player heartbeat — kept for compatibility with existing
    *        clients, but its 1.8.x role (anti-demote) is gone. The
@@ -1723,6 +1927,147 @@ async function boot() {
     },
   });
   app.use('/audio-files', auth.mediaGuard(config.IMAGE_EXTS), audioStaticHandler);
+
+  // ============================================================
+  // v1.9.0 HiFi audio streaming endpoint.
+  // ============================================================
+  //
+  // /audio-stream/:cid/<rel-path> — routes the audio request through
+  // the lib/audio-stream.js HiFi pipeline. The route picker
+  // (lib/media-route.decideAudioRoute) decides whether to:
+  //
+  //   * redirect to /audio-files/<cid>/<file> for native byte-range
+  //     (mp3 / aac / vorbis / opus / wav / FLAC on non-Safari)
+  //   * spawn ffmpeg with `-c:a copy -f mp4` for FLAC-into-fmp4 on
+  //     Safari, ALAC-into-byte-range on Safari, ALAC→FLAC for non-
+  //     Safari, APE / WavPack / WMA-Lossless / AIFF → FLAC, DSD →
+  //     soxr 24/96 FLAC
+  //   * Opus 510k fallback when fmp4-flac is not supported
+  //
+  // No on-disk cache — audio remux is cheap enough to redo per play.
+  app.get(/^\/audio-stream\/([^/]+)\/(.+)$/, auth.requireAuth, async (req, res) => {
+    const id = req.params[0];
+    const file = req.params[1];
+    if (collectionsLib.validateId(id) !== null) {
+      return res.status(400).json({ error: 'invalid collection id' });
+    }
+    if (!isSafeRelativePath(file)) {
+      return res.status(400).json({ error: 'invalid filename' });
+    }
+    const folderAbs = audioStore.resolveCollectionPath(id);
+    if (!folderAbs) return res.status(404).json({ error: 'collection not found' });
+    const fileAbs = path.resolve(folderAbs, file);
+    if (fileAbs !== folderAbs && !fileAbs.startsWith(folderAbs + path.sep)) {
+      return res.status(400).json({ error: 'invalid path' });
+    }
+    if (!fs.existsSync(fileAbs)) {
+      return res.status(404).json({ error: 'episode not found' });
+    }
+    const ext = path.extname(file).toLowerCase();
+    if (!config.AUDIO_EXTS.includes(ext)) {
+      return res.status(400).json({ error: 'not an audio file' });
+    }
+
+    // Mediainfo: prefer the cached HiFi scan in .collection.json (cheap
+    // O(1) lookup via audioStore.getCollection) over a fresh probe.
+    // Fall back to probe-cache.getMediaInfo on miss so a brand-new
+    // (or rescan-pending) file still routes correctly.
+    let mediaInfo = null;
+    try {
+      const col = audioStore.getCollection(id);
+      const ep = col && Array.isArray(col.episodes)
+        ? col.episodes.find((e) => e.file === file)
+        : null;
+      if (ep && ep.mediaInfo && !ep.mediaInfo.error) {
+        mediaInfo = ep.mediaInfo;
+      } else if (ffmpeg.isReady()) {
+        const bin = ffmpeg.getBin();
+        if (bin && bin.ffprobe) {
+          const stat = fs.statSync(fileAbs);
+          mediaInfo = await probeCache.getMediaInfo(bin.ffprobe, fileAbs, {
+            mtimeMs: stat.mtimeMs,
+            priority: 'foreground',
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[audio-stream] mediaInfo lookup failed:', e.message);
+    }
+
+    const caps = getClientCaps(req);
+    const decision = mediaRoute.decideAudioRoute({
+      mediaInfo,
+      browserCaps: caps,
+      containerExt: ext,
+    });
+
+    // Byte-range native path: internal redirect to /audio-files.
+    // 302 keeps the auth cookie / Range header semantics; the static
+    // handler picks up the request fresh.
+    if (decision.route === 'byte-range') {
+      const target = '/audio-files/' + encodeURIComponent(id)
+        + '/' + file.split('/').map(encodeURIComponent).join('/');
+      res.setHeader('X-Audio-Route', 'byte-range');
+      return res.redirect(302, target);
+    }
+
+    if (!ffmpeg.isReady()) {
+      return res.status(503).json({ error: 'ffmpeg not available' });
+    }
+
+    const sourceCodec = (mediaInfo && Array.isArray(mediaInfo.audio) && mediaInfo.audio[0])
+      ? String(mediaInfo.audio[0].codec || '').toLowerCase()
+      : null;
+
+    const audioStreamLib = require('./lib/audio-stream');
+    const startSec = Math.max(0, Number(req.query.t) || 0);
+
+    try {
+      await audioStreamLib.streamAudio({
+        absInputPath: fileAbs,
+        res,
+        file,
+        routeName: decision.route,
+        sourceCodec,
+        downmixPolicy: config.AUDIO_DOWNMIX_DEFAULT,
+        startSec,
+      });
+    } catch (e) {
+      console.error('[audio-stream] spawn failed:', e.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'audio stream failed: ' + e.message });
+      }
+    }
+  });
+
+  // ============================================================
+  // v1.9.0 embedded audio cover image serving.
+  // ============================================================
+  //
+  // /audio-covers/:cid/<rel-path> — returns the on-disk cached cover
+  // image extracted by lib/audio.js scanAudioMeta from the audio
+  // file's embedded album-art tag. 404 when no cover was ever
+  // extracted (either the file has none or the scan hasn't run yet).
+  //
+  // Cached with a 1-hour max-age; covers don't change without a file
+  // edit, and a file edit invalidates the audio scan cache via mtime
+  // anyway.
+  app.get(/^\/audio-covers\/([^/]+)\/(.+)$/, auth.requireAuth, (req, res) => {
+    const id = req.params[0];
+    const file = req.params[1];
+    if (collectionsLib.validateId(id) !== null) {
+      return res.status(400).json({ error: 'invalid collection id' });
+    }
+    if (!isSafeRelativePath(file)) {
+      return res.status(400).json({ error: 'invalid filename' });
+    }
+    const coverPath = audioStore.resolveCoverPath
+      ? audioStore.resolveCoverPath(id, file)
+      : null;
+    if (!coverPath) return res.status(404).json({ error: 'no cover' });
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.sendFile(coverPath, { acceptRanges: true });
+  });
 
   // Image files static mount — all image files are publicly browsable
   // (same as covers), no auth guard needed.
