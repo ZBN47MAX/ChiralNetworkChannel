@@ -1,7 +1,16 @@
 {
-  "version": "Release1.12.0",
-  "versionNums": "1.12.0",
+  "version": "Release1.12.1",
+  "versionNums": "1.12.1",
   "changelog": [
+    {
+      "version": "Release1.12.1",
+      "date": "2026-05-27",
+      "changes": [
+        "修复 WAV 音频播放 / 进度跳转 / 字幕同步（同一根因）：WAV(PCM) 此前因 media-route.js 的 SAFE_AUDIO_CODECS 不含任何 pcm_* 且被 lib/audio.js 标为 lossless，被错误强制走 fmp4-flac 实时转码；转码流无 Content-Length/Accept-Ranges，<audio> 元素无法 seek（进度跳转失败）且 duration/currentTime 不稳导致字幕/歌词高亮漂移失同步。decideAudioRoute 新增「pcm_* 且 .wav/.wave 容器」byte-range 分支，命中后 302 跳 /audio-files 静态处理器（acceptRanges），恢复 WAV 原生可播 + 可 seek + 字幕同步。刻意只放行 .wav 容器，PCM-in-AIFF 等浏览器不友好容器仍走 fmp4-flac 不越界。Why：已知问题汇总 #1。",
+        "次级文件夹递归深度上限 MAX_SCAN_DEPTH 4→12：原 4 层上限会把第 5 层及更深的媒体/字幕文件静默丢弃（无报错、无部分扫描），导致深层目录内容根本不出现。提到 12 层覆盖极深嵌套并满足「至少保证根目录下 5 层识别」需求，同时保持有限上限以防死链接/病态深树在单盘 NAS 上拖垮整库列表。单点改动覆盖 lib/collections.js 全部 4 个递归扫描函数（walkImages/listCollectionTree/scanSidecars/scanEpisodesRaw）。Why：已知问题汇总 #2。",
+        "读取速度优化：getCollection 此前对同一棵树全树遍历 3 次（scanEpisodesRaw 内 scanSidecars + 主 walk，再加 listAllSubtitles 重复调 scanSidecars）。让 scanEpisodesRaw/buildEpisodes 经可选 out 参数导出已构建的 subsByStem，getCollection 用 subtitlesListFromStems 直接派生 availableSubtitles，省掉一次整树磁盘遍历（约 -33% I/O / 每次打开合集），零额外内存、无语义变化、向后兼容。更激进的「两遍并一遍」留作后续。Why：已知问题汇总 #3。"
+      ]
+    },
     {
       "version": "Release1.12.0",
       "date": "2026-05-26",
