@@ -3246,6 +3246,88 @@ video::cue {
   margin-bottom: 10px;
   letter-spacing: 0.3px;
 }
+
+/* ==================================================================
+ * BULK-TARGET (move/copy) on-demand collection search.
+ * ------------------------------------------------------------------
+ * The dialog replaced its full <select> of every collection with a
+ * search box + 搜索 button + a results list. These rules style that
+ * trio to match the HUD form aesthetic of the surrounding dialog.
+ * ================================================================== */
+
+/* Input + button sit on one row. The global `.field input { width:100% }`
+ * rule (higher specificity than a bare class) is neutralised here with an
+ * equal-specificity selector defined later in the cascade. */
+.bulk-target-search {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.bulk-target-search input {
+  flex: 1 1 auto;
+  width: auto;       /* override .field input { width: 100% } */
+  min-width: 0;      /* allow the flex item to shrink below content size */
+}
+.bulk-target-search-btn {
+  flex: 0 0 auto;
+  width: auto;
+  white-space: nowrap;
+}
+
+/* Results list: a scrollable, framed box. Idle hint and the loading /
+ * empty / error states reuse the muted .bulk-target-hint row. */
+.bulk-target-results {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  max-height: 40vh;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+}
+.bulk-target-results:empty { display: none; }
+.bulk-target-hint {
+  padding: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+/* One selectable candidate collection. Title on the left, episode count
+ * on the right. Hover + .selected give the picked-row affordance. */
+.bulk-target-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-size: 13px;
+}
+.bulk-target-result:last-child { border-bottom: none; }
+.bulk-target-result:hover {
+  background: var(--surface-2);
+}
+.bulk-target-result.selected {
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+  border-color: var(--accent);
+}
+.bulk-target-result.selected .bulk-target-result-title { color: var(--accent); }
+.bulk-target-result-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bulk-target-result-meta {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 0.3px;
+}
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -4013,6 +4095,50 @@ video::cue {
   #sort-dir-btn { flex: 0 0 48px; }
   #home-bulk-btn,
   #home-audio-upload-btn { flex: 1 0 100%; }
+
+  /**
+   * @brief Mobile sub-tag row reordering — lift `.filter-substack` to
+   *        sit immediately under the primary `.filter-chips` row.
+   *
+   * @details
+   *   Background. On desktop the toolbar is a single wide flex row,
+   *   so `.filter-substack { order: 99 }` (set in the base rule near
+   *   line 1180) deliberately docks the sub-chip stack at the very
+   *   bottom — there is nothing visually between it and the primary
+   *   chip strip because everything else fits on the row above.
+   *
+   *   On mobile (`<= 600px`) the toolbar wraps each control onto its
+   *   own row (see flex-basis declarations 3991–4015 above), so
+   *   `order: 99` pushes the secondary tag rail past `filter-op`,
+   *   `sort-select` + `#sort-dir-btn`, `#home-bulk-btn`, and
+   *   `#home-audio-upload-btn`. The result is that sub-tags appear
+   *   four rows below their parent chip row — breaking the visual
+   *   hierarchy (sub-chips read as children of their parent chip,
+   *   so they should be physically adjacent to it).
+   *
+   *   Fix. Move `.filter-substack` to `order: 1` so it lands right
+   *   after the `order: 0` group (which contains `.toolbar-mobile-bar`
+   *   at DOM index 0 and `.filter-chips` at DOM index 2). Bump every
+   *   other toolbar control that previously rode on `order: 0`
+   *   (op switch / sort / bulk / upload) to `order: 2` so they wrap
+   *   below the sub-tag rail.
+   *
+   *   Left alone: `.toolbar-mobile-bar` (pill caret, must stay on top
+   *   of the order:0 group), `.fav-toggle` / `#show-hidden-toggle`
+   *   (already `order: -1` so they ride above everything; that is the
+   *   existing 1.5.3 mobile design and is out of scope here),
+   *   `.filter-active-tags` (`order: -1` in the base rule, also
+   *   correct — selected-tag chip bar belongs above the chip rail).
+   *
+   *   Scoped to `.home-toolbar.expanded` so the collapsed-pill state
+   *   (which already hides every non-mobile-bar child) is unaffected.
+   */
+  .home-toolbar.expanded .filter-substack { order: 1; }
+  .home-toolbar.expanded .filter-op,
+  .home-toolbar.expanded .sort-select,
+  .home-toolbar.expanded #sort-dir-btn,
+  .home-toolbar.expanded #home-bulk-btn,
+  .home-toolbar.expanded #home-audio-upload-btn { order: 2; }
 
   #cards {
     grid-template-columns: repeat(2, 1fr);

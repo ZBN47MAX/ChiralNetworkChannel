@@ -1,7 +1,36 @@
 {
-  "version": "Release1.12.1",
-  "versionNums": "1.12.1",
+  "version": "Release1.14.0",
+  "versionNums": "1.14.0",
   "changelog": [
+    {
+      "version": "Release1.14.0",
+      "date": "2026-06-08",
+      "changes": [
+        "新功能：单集/批量「移动·复制到别的合集」的目标选择，从全量 <select> 改为按需搜索。原 bulk-target-dialog 用一个 <select>，靠 GET /api/collections?includeHidden=1 把全部其他合集一次性塞进下拉——合集数一多（数据规模基线 100×N 金字塔扩张）就翻不动、选不准。改为「搜索输入框 + 搜索按钮 + 结果列表」：输入合集名后点『搜索』（或在输入框回车）触发一次性查询，命中合集渲染成可点选列表，点选高亮后再点『执行』完成 move/copy。刻意不加拼音、不加任何新依赖、不做实时(as-you-type)搜索——纯前端复用现有 GET /api/collections 的 ?q=(标题子串小写 includes) + ?limit=30 + includeHidden=1，服务端零改动。move/copy × 单集/批量 四个入口共用同一搜索组件（本就共用 bulk-target-dialog）。细节：候选排除当前源合集；空查询/搜索中/无结果/失败各有独立提示行；Enter 在输入框内触发搜索而非提交表单（否则会在没选目标时直接提交）；每次重新搜索都清掉上一次的选中态，杜绝提交陈旧高亮；提交校验从读 <select>.value 改为读 state.bulkTargetChosenId。改动文件：public/index.html（dialog 标记 <select> 换成 input+button+ul）、public/app.js（openBulkTargetDialog 重写 + 新增 runBulkTargetSearch + 结果点选/提交逻辑 + state.bulkTargetChosenId）、public/style.css（.bulk-target-search / .bulk-target-results / .bulk-target-result 系列样式，含覆盖全局 .field input{width:100%} 的等 specificity 规则）。靠 MINOR bump 自动破前端缓存（app.js/style.css?v=Release1.14.0）。Why：已知问题汇总「需要将现在单集移动或复制到别的合集的过程优化，弃用完整列表转而使用轻量级合集名搜索」。"
+      ]
+    },
+    {
+      "version": "Release1.13.2",
+      "date": "2026-05-27",
+      "changes": [
+        "Bug 修复：管理面板-查重页每行的「删除」按钮总是删不掉。Root cause：该删除请求未带 ?force=1，而服务端 lib/collections.js deleteCollection 对非空合集在无 force 时一律抛 E_COLLECTION_NOT_EMPTY（『合集仍有 N 个文件』）。查重列表里的合集天然都含媒体文件（正是被比对重复的对象），故每次必被拒、前端弹『删除失败』、合集一直在——『总是』即源于此确定性拒绝。对照批量删除（恒带 ?force=1）与详情页删除（非空时带 ?force=1）两条正常路径，唯独查重页这条漏了。修法（纯前端 public/app.js dup-del-btn 处理器）：① DELETE /api/collections/<id> 加 ?force=1，与批量删除一致；② 确认文案改为明确『将连同其媒体文件一并永久删除，不可撤销』，匹配 force 删除真实后果。未动服务端、未改 deleteCollection 的 force 语义、未碰批量/详情删除路径。Why：用户原话『管理页面 查重的快速删除总是无法正常删除』。"
+      ]
+    },
+    {
+      "version": "Release1.13.1",
+      "date": "2026-05-27",
+      "changes": [
+        "UX：管理面板-查重中每个条目的「打开」按钮改为在新标签页打开合集，而非在本页直接跳转。Why：用户原话「管理面板-查重中的每个条例在使用『打开』时应该默认打开新的标签页而不是直接在本页跳转」——这样 admin 能保留查重扫描结果继续对比，不丢失当前列表。改动 public/app.js dup-open-btn 处理器：原 navigate('#/c/'+id)（本页 hash 跳转，且会顺带改 state.kind+applyKindUI）改为 window.open(url, '_blank', 'noopener')。合集 id 按 kind 隔离、新标签页启动时从 KIND_KEY 读当前板块，故点击前先 localStorage.setItem(KIND_KEY, scanKind) 保证新标签页用对板块加载；刻意不再改当前标签页的 state.kind/UI（只有新标签页切板块，admin 停在查重页）。纯前端单文件改动，靠 PATCH bump 自动破缓存（app.js?v=Release1.13.1）。"
+      ]
+    },
+    {
+      "version": "Release1.13.0",
+      "date": "2026-05-27",
+      "changes": [
+        "新功能：查重白名单从「恰好选 2 项」升级为「至少选 2 项，多选全两两组合」。选中 N 个合集（N>=2）时，把该集合能组成的全部 C(N,2)=N*(N-1)/2 对都加入白名单（互相标记为彼此都不是重复），而不再要求一次只标一对。lib/duplicate-whitelist.js 新增 addMany(kind, ids)：去重/去空后要求 >=2 个不同 id，生成全部两两组合、与已有项去重后单次原子写入（整组成功或不写）。server.js POST /api/admin/duplicates/whitelist 现接受两种 body：{kind, ids:[...]}（新，全组合）或 {kind, a, b}（旧单对，保留向后兼容）。前端 public/app.js：dup-mark-btn 门槛 n!==2 改为 n<2，文案显示「选中 N 项 → M 对」，点击时把整个勾选集合作为 ids 一次提交，toast 反馈写入项数/对数。跨组勾选照常组合（勾选框本就跨所有嫌疑组共享）。Why：用户原话「管理页面查重白名单……改成至少需要选中两个才能加入，但是如果大于2个，则选中的所有内容可以组成的全部关系都是白名单」。",
+        "Bug 修复：复选管理合集（home 批量管理）向下滚动后勾选某张卡会跳回页面顶部。Root cause：public/app.js 卡片点击在 bulkColMode 下调用 renderCards() 重建整个网格（cardsEl.innerHTML = '' 后重新 appendChild），整片 DOM 被销毁重建导致浏览器把滚动位置复位到顶部。修法：勾选时只就地更新被点击的那张卡——切换 bulk-selected class + 改 .card-bulk-check 的 data-icon 后 injectIcons(card)，不再整网格重渲染。全选/清空仍走整体重渲染（一次改很多卡、且由固定底栏按钮触发，无此问题）。Why：用户原话「复选管理合集功能出现问题，当向下滚动然后勾选后会跳转回到顶部」。"
+      ]
+    },
     {
       "version": "Release1.12.1",
       "date": "2026-05-27",

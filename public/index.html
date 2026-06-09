@@ -1379,10 +1379,16 @@
     <form id="bulk-target-form" method="dialog">
       <div class="dialog-title" id="bulk-target-title">// MOVE TO</div>
       <div class="dialog-subtitle" id="bulk-target-subtitle"></div>
-      <label class="field">
+      <div class="field">
         <span>目标合集</span>
-        <select id="bulk-target-select"></select>
-      </label>
+        <div class="bulk-target-search">
+          <input type="text" id="bulk-target-search-input" placeholder="输入合集名，点搜索或回车" autocomplete="off" />
+          <button type="button" id="bulk-target-search-btn" class="btn-primary bulk-target-search-btn">搜索</button>
+        </div>
+      </div>
+      <ul id="bulk-target-results" class="bulk-target-results" role="listbox" aria-label="搜索结果">
+        <li class="bulk-target-hint">输入合集名后点「搜索」</li>
+      </ul>
       <div class="dialog-error" id="bulk-target-error"></div>
       <div class="dialog-actions">
         <button type="button" id="bulk-target-cancel" class="icon-btn">取消</button>

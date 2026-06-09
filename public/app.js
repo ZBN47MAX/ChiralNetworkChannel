@@ -351,7 +351,9 @@
   const bulkTargetForm   = $('bulk-target-form');
   const bulkTargetTitle  = $('bulk-target-title');
   const bulkTargetSubtitle = $('bulk-target-subtitle');
-  const bulkTargetSelect = $('bulk-target-select');
+  const bulkTargetSearchInput = $('bulk-target-search-input');
+  const bulkTargetSearchBtn   = $('bulk-target-search-btn');
+  const bulkTargetResults     = $('bulk-target-results');
   const bulkTargetError  = $('bulk-target-error');
   const bulkTargetCancel = $('bulk-target-cancel');
   const bulkTargetOk     = $('bulk-target-ok');
@@ -465,6 +467,7 @@
     bulkAction: null,     // 'move' | 'copy' | 'delete'
     bulkFiles: [],        // files to operate on
     bulkSingle: false,    // single-episode submenu operation
+    bulkTargetChosenId: '', // move/copy target picked from the search list
     plyr: null,
     historyItems: [],     // last loaded history list
     historyManageMode: false,
@@ -4613,9 +4616,19 @@
             toast('受保护的合集不能批量操作', 'warning');
             return;
           }
-          if (state.bulkColSelected.has(col.id)) state.bulkColSelected.delete(col.id);
-          else state.bulkColSelected.add(col.id);
-          renderCards();
+          const nowSelected = !state.bulkColSelected.has(col.id);
+          if (nowSelected) state.bulkColSelected.add(col.id);
+          else state.bulkColSelected.delete(col.id);
+          // Update only the clicked card in place. A full renderCards()
+          // rebuilds the whole grid (cardsEl.innerHTML = ''), which resets
+          // the scroll position to the top — jarring when selecting after
+          // scrolling down. Toggling the class + checkbox icon avoids that.
+          card.classList.toggle('bulk-selected', nowSelected);
+          const checkEl = card.querySelector('.card-bulk-check');
+          if (checkEl) {
+            checkEl.dataset.icon = nowSelected ? 'checkbox-on' : 'checkbox';
+            injectIcons(card);
+          }
           updateBulkColBar();
           return;
         }
@@ -5921,11 +5934,33 @@
 
   // ==================================================================
   // BULK TARGET DIALOG (shared: single episode + manage mode)
+  // ------------------------------------------------------------------
+  // The target collection is chosen with an on-demand search box rather
+  // than a full <select> of every collection: the user types a name,
+  // presses the 搜索 button (or Enter), and a single request renders the
+  // matching collections as a selectable list. No full list is ever
+  // materialised client-side, so the dialog stays usable when the library
+  // holds hundreds/thousands of collections.
+  //
+  // Matching is plain title substring, served by the existing
+  // GET /api/collections?q=&limit=&includeHidden=1 endpoint — deliberately
+  // no pinyin and no live/as-you-type search (a dependency-free, one-shot
+  // search per the 2026-06-08 requirement).
   // ==================================================================
-  async function openBulkTargetDialog(action, files, singleFile) {
+
+  /**
+   * @brief Open the move/copy target picker for the given episodes.
+   * @param action     'move' | 'copy'.
+   * @param files      Episode rel-paths to operate on.
+   * @param singleFile When set, the single-episode label variant is used.
+   * @details Resets the search box + result list to their idle state;
+   *          nothing is fetched until the user runs a search.
+   */
+  function openBulkTargetDialog(action, files, singleFile) {
     state.bulkAction = action;
     state.bulkFiles = files;
     state.bulkSingle = !!singleFile;
+    state.bulkTargetChosenId = '';   // no target picked yet
     bulkTargetError.textContent = '';
     const actionLabel = action === 'move' ? 'MOVE TO' : 'COPY TO';
     bulkTargetTitle.textContent = '// ' + actionLabel;
@@ -5934,30 +5969,76 @@
       : `${files.length} 集将被${action === 'move' ? '移动' : '复制'}到目标合集`;
     bulkTargetOk.textContent = action === 'move' ? '移动' : '复制';
 
-    // Populate target dropdown with other collections.
-    bulkTargetSelect.innerHTML = '<option value="">加载中...</option>';
-    try {
-      const { collections } = await api('GET', '/api/collections?includeHidden=1');
-      const others = collections.filter((c) => c.id !== state.currentCollection.id);
-      if (!others.length) {
-        bulkTargetSelect.innerHTML = '<option value="">（没有其他合集）</option>';
-      } else {
-        bulkTargetSelect.innerHTML = others
-          .map((c) => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.title || c.id)} (${c.episodeCount} ${countUnit()})</option>`)
-          .join('');
-      }
-    } catch (err) {
-      bulkTargetSelect.innerHTML = '<option value="">加载失败</option>';
-    }
+    bulkTargetSearchInput.value = '';
+    bulkTargetResults.innerHTML = '<li class="bulk-target-hint">输入合集名后点「搜索」</li>';
     bulkTargetDialog.showModal();
+    // Focus the query box so the user can type immediately.
+    setTimeout(() => bulkTargetSearchInput.focus(), 0);
   }
+
+  /**
+   * @brief Run one search and render the matching collections.
+   * @details Hits GET /api/collections?q=…&limit=…&includeHidden=1, drops
+   *          the current (source) collection from the candidates, and
+   *          paints the rest as clickable rows. The picked-target state is
+   *          cleared on every fresh search so a stale highlight can never
+   *          be submitted.
+   */
+  async function runBulkTargetSearch() {
+    const q = bulkTargetSearchInput.value.trim();
+    bulkTargetError.textContent = '';
+    state.bulkTargetChosenId = '';
+    if (!q) {
+      bulkTargetResults.innerHTML = '<li class="bulk-target-hint">请先输入合集名</li>';
+      return;
+    }
+    bulkTargetResults.innerHTML = '<li class="bulk-target-hint">搜索中…</li>';
+    try {
+      const params = new URLSearchParams({ q, limit: '30', includeHidden: '1' });
+      const { collections } = await api('GET', '/api/collections?' + params.toString());
+      const others = (collections || []).filter((c) => c.id !== state.currentCollection.id);
+      if (!others.length) {
+        bulkTargetResults.innerHTML = '<li class="bulk-target-hint">没有匹配的合集</li>';
+        return;
+      }
+      bulkTargetResults.innerHTML = others.map((c) => {
+        const title = escapeHtml(c.title || c.id);
+        const count = (c.episodeCount != null ? c.episodeCount : 0) + ' ' + countUnit();
+        return `<li class="bulk-target-result" role="option" aria-selected="false" data-id="${escapeHtml(c.id)}">`
+          + `<span class="bulk-target-result-title">${title}</span>`
+          + `<span class="bulk-target-result-meta">${count}</span></li>`;
+      }).join('');
+    } catch (err) {
+      bulkTargetResults.innerHTML = '<li class="bulk-target-hint">搜索失败：' + escapeHtml(err.message) + '</li>';
+    }
+  }
+
+  bulkTargetSearchBtn.addEventListener('click', runBulkTargetSearch);
+  // Enter inside the query box runs a search rather than submitting the
+  // form (form submit would fire the move/copy with no target chosen).
+  bulkTargetSearchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); runBulkTargetSearch(); }
+  });
+  // Click a result row to pick it as the move/copy target (single select).
+  bulkTargetResults.addEventListener('click', (e) => {
+    const li = e.target.closest('.bulk-target-result');
+    if (!li) return;
+    state.bulkTargetChosenId = li.dataset.id || '';
+    bulkTargetError.textContent = '';
+    for (const row of bulkTargetResults.querySelectorAll('.bulk-target-result')) {
+      const on = row === li;
+      row.classList.toggle('selected', on);
+      row.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
+  });
+
   bulkTargetCancel.addEventListener('click', () => bulkTargetDialog.close('cancel'));
   bulkTargetForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     bulkTargetError.textContent = '';
-    const target = bulkTargetSelect.value;
+    const target = state.bulkTargetChosenId;
     if (!target) {
-      bulkTargetError.textContent = '请选择目标合集';
+      bulkTargetError.textContent = '请搜索并选择目标合集';
       return;
     }
     bulkTargetDialog.close('confirm');
@@ -10950,22 +11031,30 @@
     out.querySelectorAll('.dup-open-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         const id = btn.closest('tr').dataset.id;
-        if (state.kind !== scanKind) {
-          state.kind = scanKind;
-          try { localStorage.setItem(KIND_KEY, scanKind); } catch (_e) {}
-          applyKindUI();
-        }
-        navigate('#/c/' + encodeURIComponent(id));
+        // Open the collection in a NEW tab instead of navigating in place,
+        // so the admin keeps the duplicate scan open for comparison.
+        // Collection ids are kind-scoped and a freshly-booted tab reads the
+        // active subsystem from KIND_KEY, so persist the scan's kind first.
+        // We intentionally leave this tab's state.kind / UI untouched — only
+        // the new tab should switch subsystems.
+        try { localStorage.setItem(KIND_KEY, scanKind); } catch (_e) {}
+        const url = new URL(location.href);
+        url.hash = '#/c/' + encodeURIComponent(id);
+        window.open(url.href, '_blank', 'noopener');
       });
     });
     out.querySelectorAll('.dup-del-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const tr = btn.closest('tr');
         const id = tr.dataset.id;
-        const ok = await confirmBox(`删除合集「${id}」？此操作不可撤销。`, 'DELETE COLLECTION');
+        const ok = await confirmBox(`删除合集「${id}」将连同其媒体文件一并永久删除，不可撤销。确定？`, 'DELETE COLLECTION');
         if (!ok) return;
         try {
-          await kindFetch(scanKind, 'DELETE', '/api/collections/' + encodeURIComponent(id));
+          // force=1 is required: collections in a duplicate scan always have
+          // media files, and the server rejects deleting a non-empty
+          // collection unless forced (E_COLLECTION_NOT_EMPTY). Matches the
+          // bulk-delete path. Without it this delete always failed silently.
+          await kindFetch(scanKind, 'DELETE', '/api/collections/' + encodeURIComponent(id) + '?force=1');
           toast('已删除 ' + id);
           loadAdminDuplicates();
         } catch (e) {
@@ -11001,21 +11090,26 @@
   function updateDupMarkBtnState() {
     const btn = document.getElementById('dup-mark-btn');
     if (!btn) return;
+    // At least 2 must be checked. Selecting N items whitelists every pair
+    // among them — C(N,2) = N*(N-1)/2 pairs — so the button advertises how
+    // many pairs the current selection will produce.
     const n = getCheckedDupIds().length;
-    btn.disabled = (n !== 2);
-    btn.textContent = n === 2
-      ? '标为非重复（选中 2 项）'
-      : `标为非重复（需选 2 项${n ? '，已选 ' + n : ''}）`;
+    const pairs = n >= 2 ? (n * (n - 1)) / 2 : 0;
+    btn.disabled = (n < 2);
+    btn.textContent = n >= 2
+      ? `标为非重复（选中 ${n} 项 → ${pairs} 对）`
+      : `标为非重复（至少选 2 项${n ? '，已选 ' + n : ''}）`;
   }
   const dupMarkBtn = document.getElementById('dup-mark-btn');
   if (dupMarkBtn) {
     dupMarkBtn.addEventListener('click', async () => {
       const picked = getCheckedDupIds();
-      if (picked.length !== 2) return;
-      const [a, b] = picked;
+      if (picked.length < 2) return;
+      const pairs = (picked.length * (picked.length - 1)) / 2;
       try {
-        await api('POST', '/api/admin/duplicates/whitelist', { kind: dupState.kind, a, b });
-        toast('已加入白名单：' + a + ' / ' + b, 'success');
+        // Send the whole set; the server forms every pair in one atomic write.
+        await api('POST', '/api/admin/duplicates/whitelist', { kind: dupState.kind, ids: picked });
+        toast(`已加入白名单：${picked.length} 项 / ${pairs} 对组合`, 'success');
         loadAdminDuplicates();
       } catch (e) {
         toast('加入失败: ' + e.message, 'error');

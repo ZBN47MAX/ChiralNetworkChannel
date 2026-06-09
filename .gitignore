@@ -39,3 +39,6 @@ runtime/
 
 # 打包流程整体不公开:产物 + 暂存 + 脚本配方都不传
 WinBuild/
+
+# IDE 缓存(Visual Studio):可重建,不进 git
+.vs/

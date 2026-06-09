@@ -3767,6 +3767,14 @@ async function boot() {
   app.post('/api/admin/duplicates/whitelist', auth.requireAdmin, async (req, res) => {
     try {
       const kind = String((req.body && req.body.kind) || 'video');
+      // Two shapes accepted:
+      //   { kind, ids: [...] }  → whitelist every pair in the set (>= 2 ids).
+      //   { kind, a, b }        → legacy single-pair form, kept for back-compat.
+      const ids = req.body && Array.isArray(req.body.ids) ? req.body.ids : null;
+      if (ids) {
+        await dupWhitelist.addMany(kind, ids);
+        return res.json({ ok: true, pairs: dupWhitelist.getKind(kind) });
+      }
       const a = String((req.body && req.body.a) || '');
       const b = String((req.body && req.body.b) || '');
       if (!a || !b) return res.status(400).json({ error: '需要两个合集 id' });
