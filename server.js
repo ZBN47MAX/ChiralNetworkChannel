@@ -13,6 +13,7 @@ const users = require('./lib/users');
 const sessions = require('./lib/sessions');
 const collectionsLib = require('./lib/collections');
 const progressLib = require('./lib/progress');
+const watchStatsLib = require('./lib/watch-stats');
 const commentsLib = require('./lib/comments');
 const favoritesLib = require('./lib/favorites');
 const trackLikesLib = require('./lib/track-likes');
@@ -284,6 +285,15 @@ async function boot() {
   await imageProgress.init();
   await novelProgress.init();
   step('progress stores loaded');
+
+  // Cross-subsystem watch statistics (video + audio): one shared daily store.
+  // Records per-day watched seconds and "crossed 70%" view counts, feeding the
+  // 观看记录总览 calendar page. Forward-only — accumulates from first beat.
+  const watchStats = watchStatsLib.createStore({
+    file: path.join(config.DATA_ROOT, 'watch-stats.json'),
+  });
+  await watchStats.init();
+  step('watch-stats loaded');
 
   const videoComments = commentsLib.createStore({
     file: path.join(config.DATA_ROOT, 'comments.json'),
@@ -2976,6 +2986,17 @@ async function boot() {
       } catch (e) {
         res.status(400).json({ error: e.message });
       }
+      // Feed cross-subsystem watch statistics (video/audio only). Kept OUTSIDE
+      // the response try/catch and self-guarded so a stats failure can never
+      // break progress saving nor double-send the response.
+      if (kind === 'video' || kind === 'audio') {
+        try {
+          const body = req.body || {};
+          Promise.resolve(
+            watchStats.record(req.user.username, kind, id, file, { sec: body.sec, view: body.view })
+          ).catch(() => {});
+        } catch (_) { /* never let stats break progress */ }
+      }
     });
 
     app.post(`${p}/api/progress/:id/:file/mark`, auth.requireAuth, async (req, res) => {
@@ -3166,6 +3187,43 @@ async function boot() {
     mediaDir: config.NOVEL_ROOT,
     mediaExts: config.NOVEL_EXTS,
     subtitleExts: [],
+  });
+
+  // ================================================================
+  // Watch statistics (cross-subsystem, read-only).
+  // Returns daily/monthly aggregates for the current user across video +
+  // audio. byEpisode is enriched here with title/cover so the storage module
+  // stays pure logic. Mounted globally (not under a subsystem prefix) because
+  // the 观看记录总览 page merges video and audio.
+  // ================================================================
+  app.get('/api/watch-stats', auth.requireAuth, (req, res) => {
+    const period = String(req.query.period || 'month');
+    const allowed = ['day', 'month', 'quarter', 'year', 'all'];
+    if (!allowed.includes(period)) return res.status(400).json({ error: 'period 非法' });
+    const anchor = req.query.anchor ? String(req.query.anchor) : undefined;
+    const r = watchStats.query(req.user.username, { period, anchor });
+
+    const enriched = r.byEpisode.map((e) => {
+      const storeRef = e.subsystem === 'audio' ? audioStore : videoStore;
+      const col = storeRef.getCollection(e.collectionId);
+      const ep = col ? (col.episodes || []).find((x) => x.file === e.file) : null;
+      return {
+        subsystem: e.subsystem,
+        collectionId: e.collectionId,
+        file: e.file,
+        title: col ? col.title : e.collectionId,
+        episodeTitle: ep ? (ep.title || e.file) : e.file,
+        cover: col ? col.cover : null,
+        coverScale: col && typeof col.coverScale === 'number' ? col.coverScale : 1,
+        coverX: col && typeof col.coverX === 'number' ? col.coverX : 50,
+        coverY: col && typeof col.coverY === 'number' ? col.coverY : 50,
+        exists: !!col,
+        views: e.views,
+        seconds: e.seconds,
+        lastDay: e.lastDay,
+      };
+    });
+    res.json({ range: r.range, totals: r.totals, byDay: r.byDay, byMonth: r.byMonth, byEpisode: enriched });
   });
 
   // ================================================================

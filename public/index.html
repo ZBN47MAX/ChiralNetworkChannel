@@ -776,6 +776,7 @@
         <div class="history-head">
           <div class="section-label">// PLAYBACK HISTORY</div>
           <div class="filter-spacer"></div>
+          <button type="button" id="watch-stats-btn" class="icon-btn" data-i18n="history.statsBtn">观看记录</button>
           <button type="button" id="history-manage-btn" class="icon-btn">管理</button>
           <button type="button" id="clear-history-btn" class="icon-btn danger">清空</button>
         </div>
@@ -791,6 +792,39 @@
       <button type="button" id="history-delete-btn" class="icon-btn danger">删除</button>
       <button type="button" id="history-exit-btn" class="icon-btn">退出管理</button>
     </div>
+
+    <!-- ============================================================
+         WATCH STATS (观看记录总览) — calendar-laid-out viewing record,
+         reached from the history page. Month/Quarter/Year/All tabs with
+         day-cell drill-down. (1.15.0+)
+         ============================================================ -->
+    <section id="view-watch-stats" class="view" hidden>
+      <div class="ws-wrap">
+        <div class="ws-head">
+          <div class="ws-tabs" role="tablist">
+            <button type="button" class="ws-tab active" data-period="month" data-i18n="watchStats.tab.month">月</button>
+            <button type="button" class="ws-tab" data-period="quarter" data-i18n="watchStats.tab.quarter">季</button>
+            <button type="button" class="ws-tab" data-period="year" data-i18n="watchStats.tab.year">年</button>
+            <button type="button" class="ws-tab" data-period="all" data-i18n="watchStats.tab.all">总</button>
+          </div>
+          <div class="ws-nav">
+            <button type="button" id="ws-prev" class="icon-btn" aria-label="prev">‹</button>
+            <span id="ws-range-label" class="mono"></span>
+            <button type="button" id="ws-next" class="icon-btn" aria-label="next">›</button>
+          </div>
+        </div>
+        <div id="ws-summary" class="ws-summary"></div>
+        <div id="ws-body" class="ws-body"></div>
+      </div>
+      <div id="ws-day-detail" class="ws-day-detail" hidden>
+        <div class="ws-day-head">
+          <button type="button" id="ws-day-back" class="icon-btn" data-i18n="watchStats.dayBack">返回</button>
+          <span id="ws-day-title" class="mono"></span>
+        </div>
+        <div id="ws-day-summary" class="ws-summary"></div>
+        <ul id="ws-day-list"></ul>
+      </div>
+    </section>
 
     <!-- ============================================================
          SEARCH (1.2.0+)
@@ -1121,34 +1155,43 @@
   </div>
 
   <!-- EPISODE SUBMENU POPOVER -->
+  <!-- Items tagged .ep-edit-only are shown/hidden per-open by
+       openEpisodeSubmenu: they require delete permission AND a
+       non-nested episode (backend edit routes reject multi-segment
+       :file paths). "下载" is the only item every logged-in user —
+       and every nested episode — always gets. -->
   <div id="ep-menu" class="ep-menu" hidden>
-    <button type="button" class="menu-item" data-ep-action="edit">
+    <button type="button" class="menu-item ep-edit-only" data-ep-action="edit">
       <span class="menu-icon" data-icon="edit"></span>
       <span class="menu-label">编辑</span>
     </button>
-    <button type="button" class="menu-item" data-ep-action="upload-subtitle">
+    <button type="button" class="menu-item ep-edit-only" data-ep-action="upload-subtitle">
       <span class="menu-icon" data-icon="upload"></span>
       <span class="menu-label">上传字幕 / 歌词</span>
     </button>
-    <button type="button" class="menu-item" data-ep-action="move">
+    <button type="button" class="menu-item ep-edit-only" data-ep-action="move">
       <span class="menu-icon" data-icon="move"></span>
       <span class="menu-label">移动到...</span>
     </button>
-    <button type="button" class="menu-item" data-ep-action="copy">
+    <button type="button" class="menu-item ep-edit-only" data-ep-action="copy">
       <span class="menu-icon" data-icon="copy"></span>
       <span class="menu-label">复制到...</span>
     </button>
-    <div class="menu-divider"></div>
+    <button type="button" class="menu-item" data-ep-action="download">
+      <span class="menu-icon" data-icon="download"></span>
+      <span class="menu-label">下载</span>
+    </button>
+    <div class="menu-divider ep-edit-only"></div>
     <!-- Chain-ordering (折叠链表): pick the head this episode trails.
          Changing the value persists immediately and re-renders. -->
-    <div class="ep-menu-follow">
+    <div class="ep-menu-follow ep-edit-only">
       <span class="ep-menu-follow-label mono">// 跟随</span>
       <select id="ep-follow-select" class="sort-select">
         <option value="">— 不跟随 —</option>
       </select>
     </div>
-    <div class="menu-divider"></div>
-    <button type="button" class="menu-item danger" data-ep-action="delete">
+    <div class="menu-divider ep-edit-only"></div>
+    <button type="button" class="menu-item danger ep-edit-only" data-ep-action="delete">
       <span class="menu-icon" data-icon="trash"></span>
       <span class="menu-label">删除</span>
     </button>

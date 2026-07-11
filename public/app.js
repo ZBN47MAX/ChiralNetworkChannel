@@ -10,6 +10,9 @@
     'picture':      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14"/><circle cx="8.5" cy="10" r="1.4"/><polyline points="3,19 9,12 13,16 16,13 21,19"/></svg>',
     'edit':         '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M4 20h4L20 8l-4-4L4 16v4z"/><line x1="15" y1="5" x2="19" y2="9"/></svg>',
     'upload':       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M12 17V4"/><path d="M6 10l6-6 6 6"/><path d="M4 20h16"/></svg>',
+    // Mirror of 'upload' (arrow points down into the baseline) — used
+    // by the per-episode "下载" submenu item.
+    'download':     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M12 4v13"/><path d="M6 11l6 6 6-6"/><path d="M4 20h16"/></svg>',
     'clock':        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12,7 12,12 15,14"/></svg>',
     'manage':       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="4" width="7" height="7"/><rect x="13" y="4" width="7" height="7"/><rect x="4" y="13" width="7" height="7"/><polyline points="13,16 15,18 20,13" stroke-linejoin="round" stroke-linecap="round"/></svg>',
     'trash':        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M4 6h16"/><path d="M9 6V4h6v2"/><path d="M6 6l1 14h10l1-14"/><line x1="10" y1="10" x2="10" y2="17"/><line x1="14" y1="10" x2="14" y2="17"/></svg>',
@@ -80,6 +83,7 @@
   const galleryBulkDeleteBtn = $('gallery-bulk-delete');
   const galleryBulkExitBtn  = $('gallery-bulk-exit');
   const viewHistory = $('view-history');
+  const viewWatchStats = $('view-watch-stats');
   const viewAdmin   = $('view-admin');
   const galleryGrid = $('gallery-grid');
   const galleryLightbox = $('gallery-lightbox');
@@ -247,6 +251,7 @@
 
   const historyList     = $('history-list');
   const clearHistoryBtn = $('clear-history-btn');
+  const watchStatsBtn   = $('watch-stats-btn');
   const historyManageBtn = $('history-manage-btn');
   const historyManageBar = $('history-manage-bar');
   const historyManageCount = $('history-manage-count');
@@ -372,6 +377,9 @@
   const state = {
     user: null,
     needsFirstUser: false,
+    // Watch-stats page state: current period tab and anchor day. anchor=null
+    // means "today" (resolved at render time); 'all' tab ignores the anchor.
+    ws: { period: 'month', anchor: null },
     // Active media subsystem — 'video' or 'audio'. Controls which API
     // routes and /media-files mount are used, and which home view is shown.
     kind: 'video',
@@ -1426,7 +1434,7 @@
   // URLs are automatically prefixed with "/audio" when state.kind === 'audio'.
   // Global paths (auth/admin/health) stay untouched.
   // ==================================================================
-  const SHARED_PREFIXES = ['/api/auth', '/api/admin', '/api/health', '/api/categories', '/api/search', '/api/authors'];
+  const SHARED_PREFIXES = ['/api/auth', '/api/admin', '/api/health', '/api/categories', '/api/search', '/api/authors', '/api/watch-stats'];
   function subUrl(p) {
     // Video uses the legacy unprefixed routes (/api/...). Every other
     // kind (audio / image / novel / future) lives at /<kind>/api/...
@@ -1818,6 +1826,7 @@
       return { view: 'detail', id: decodeURIComponent(m[1]) };
     }
     if (pathPart === '#/login')   return { view: 'login' };
+    if (pathPart === '#/history/stats') return { view: 'watchStats' };
     if (pathPart === '#/history') return { view: 'history' };
     if (pathPart === '#/admin')   return { view: 'admin' };
     if (pathPart === '#/search')  return {
@@ -1867,6 +1876,7 @@
         else await showPlayer(r.id, r.file);
       }
       else if (r.view === 'history') await showHistory();
+      else if (r.view === 'watchStats') await showWatchStats();
       else if (r.view === 'admin')   await showAdmin();
       else if (r.view === 'search')  await showSearchPage(r.q, r.fields, r.searchKind, r.hidden);
     } catch (e) {
@@ -1920,6 +1930,7 @@
     }
     if (galleryLightbox) galleryLightbox.hidden = true;
     viewHistory.hidden = true;
+    if (viewWatchStats) viewWatchStats.hidden = true;
     viewAdmin.hidden = true;
     const viewSearch = document.getElementById('view-search');
     if (viewSearch) viewSearch.hidden = true;
@@ -2087,6 +2098,7 @@
       else navigate('#/c/' + encodeURIComponent(r.id));
     }
     else if (r.view === 'gallery' && !isVirtual) navigate('#/c/' + encodeURIComponent(r.id));
+    else if (r.view === 'watchStats') navigate('#/history');
     else navigate('#/');
   });
 
@@ -2509,6 +2521,32 @@
     };
     audioPlayerEl.addEventListener('loadedmetadata', onMeta);
     try { audioPlayerEl.play().catch(() => {}); } catch (e) {}
+
+    // Media Session: lock-screen controls + keep background audio alive on
+    // mobile (same root cause as the video lock-screen stop). prev/next walk
+    // the play queue off audioNowPlaying so they work from any view.
+    const audioCover = '/audio/api/collections/'
+      + encodeURIComponent(collection.id) + '/episodes/'
+      + encodePath(ep.file) + '/cover';
+    setupMediaSession(audioPlayerEl, {
+      title: ep.title || ep.file,
+      artist: collection.title || collection.id,
+      album: collection.title || collection.id,
+      artworkUrl: audioCover,
+    }, {
+      onPrev: () => {
+        const np = state.audioNowPlaying;
+        if (!np || !np.col) return;
+        const p = prevTrackIn(np.col, np.file);
+        if (p) { loadAudioTrack(np.col, p); updateAudioMiniMeta(); }
+      },
+      onNext: () => {
+        const np = state.audioNowPlaying;
+        if (!np || !np.col) return;
+        const nx = nextTrackIn(np.col, np.file);
+        if (nx) { loadAudioTrack(np.col, nx); updateAudioMiniMeta(); }
+      },
+    });
   }
 
   // Sync the play/pause icon to match audioPlayerEl's real state.
@@ -2588,6 +2626,130 @@
       try { miniPlayer.hidden = true; } catch (e) {}
       state.miniMode = false;
     }
+  }
+
+  /**
+   * @brief Wire the W3C Media Session API for the media element currently
+   *        playing (video or audio).
+   *
+   * @details This is the fix for "mobile lock-screen playback auto-stops
+   *          after ~5-7 minutes". Without an active media session, mobile
+   *          browsers (notably Android Chrome) treat a backgrounded /
+   *          screen-locked tab as an ordinary idle page: after a short
+   *          grace period they throttle then FREEZE the page, which stalls
+   *          the streaming fetch pump (fmp4-mse lane) and segment loader
+   *          (HLS lane), the bounded media buffer drains, and playback dies.
+   *          Declaring a Media Session with metadata + action handlers tags
+   *          the page as genuine media playback, so the OS keeps it alive in
+   *          the background and surfaces lock-screen / notification controls.
+   *
+   *          Calling this per episode is safe: setActionHandler overwrites
+   *          the previous handler, and the playbackState / position wiring
+   *          is guarded by a per-element dataset flag so it binds only once
+   *          even though the global media elements persist across episodes.
+   *
+   *          Degrades to a silent no-op on browsers without mediaSession.
+   *
+   * @param mediaEl  The live HTMLMediaElement (the <video> or <audio>).
+   * @param meta     { title, artist, album, artworkUrl } for the OS UI.
+   * @param nav      { onPrev, onNext } prev/next-track callbacks; pass a
+   *                 null member to leave that OS control disabled.
+   */
+  function setupMediaSession(mediaEl, meta, nav) {
+    if (!('mediaSession' in navigator) || !mediaEl) return;
+    const ms = navigator.mediaSession;
+    const m = meta || {};
+    const n = nav || {};
+
+    // Lock-screen metadata. MediaMetadata throws on some odd inputs, so
+    // guard it — failing to set artwork must never break playback wiring.
+    try {
+      const artwork = m.artworkUrl
+        ? [{ src: m.artworkUrl, sizes: '512x512', type: 'image/jpeg' }]
+        : [];
+      ms.metadata = new MediaMetadata({
+        title: m.title || '正在播放',
+        artist: m.artist || '',
+        album: m.album || '',
+        artwork,
+      });
+    } catch (_e) {}
+
+    // Action handlers. Each setActionHandler call overwrites the prior
+    // one for that action, so re-registering every episode is correct.
+    const setAction = (action, handler) => {
+      try { ms.setActionHandler(action, handler); } catch (_e) {}
+    };
+    setAction('play',  () => { try { mediaEl.play().catch(() => {}); } catch (_e) {} });
+    setAction('pause', () => { try { mediaEl.pause(); } catch (_e) {} });
+    setAction('seekbackward', (d) => {
+      const off = (d && d.seekOffset) || 10;
+      try { mediaEl.currentTime = Math.max(0, (mediaEl.currentTime || 0) - off); } catch (_e) {}
+    });
+    setAction('seekforward', (d) => {
+      const off = (d && d.seekOffset) || 10;
+      const dur = isFinite(mediaEl.duration) ? mediaEl.duration : Infinity;
+      try { mediaEl.currentTime = Math.min(dur, (mediaEl.currentTime || 0) + off); } catch (_e) {}
+    });
+    setAction('seekto', (d) => {
+      if (!d || typeof d.seekTime !== 'number') return;
+      try {
+        if (d.fastSeek && typeof mediaEl.fastSeek === 'function') mediaEl.fastSeek(d.seekTime);
+        else mediaEl.currentTime = d.seekTime;
+      } catch (_e) {}
+    });
+    setAction('previoustrack', n.onPrev ? () => { try { n.onPrev(); } catch (_e) {} } : null);
+    setAction('nexttrack',     n.onNext ? () => { try { n.onNext(); } catch (_e) {} } : null);
+
+    // One-time-per-element wiring: keep playbackState and the lock-screen
+    // scrubber in sync with the real element. The global <video>/<audio>
+    // are reused across episodes, so this must bind only once.
+    if (mediaEl.dataset.msStateWired !== '1') {
+      mediaEl.dataset.msStateWired = '1';
+      const syncState = () => {
+        try { navigator.mediaSession.playbackState = mediaEl.paused ? 'paused' : 'playing'; } catch (_e) {}
+      };
+      const syncPos = () => {
+        try {
+          if (!isFinite(mediaEl.duration) || mediaEl.duration <= 0) return;
+          navigator.mediaSession.setPositionState({
+            duration: mediaEl.duration,
+            playbackRate: mediaEl.playbackRate || 1,
+            position: Math.max(0, Math.min(mediaEl.currentTime || 0, mediaEl.duration)),
+          });
+        } catch (_e) {}
+      };
+      mediaEl.addEventListener('play', syncState);
+      mediaEl.addEventListener('pause', syncState);
+      mediaEl.addEventListener('ratechange', syncPos);
+      mediaEl.addEventListener('durationchange', syncPos);
+      mediaEl.addEventListener('timeupdate', syncPos);
+    }
+  }
+
+  /**
+   * @brief Toggle the `is-portrait` layout class on the full-player host
+   *        from the video's intrinsic dimensions.
+   *
+   * @details A portrait source (height > width — phone-shot vertical video)
+   *          would otherwise be pillarboxed inside the fixed 16:9 / 50vh
+   *          mobile player box, shrinking it to a sliver. The class lets the
+   *          stylesheet hand portrait content a tall, portrait-shaped area
+   *          so it fills the phone screen ("竖屏视频直接竖屏播"). Also records
+   *          the result on state so fullscreen entry can skip the landscape
+   *          orientation lock for portrait videos.
+   *
+   *          Called from the Plyr `loadedmetadata` hook, by which point the
+   *          <video> element knows videoWidth / videoHeight for every lane
+   *          (native, HLS, fmp4-mse). No-op before dimensions are known.
+   */
+  function applyVideoAspect() {
+    if (!player || !playerContainer) return;
+    const w = player.videoWidth || 0;
+    const h = player.videoHeight || 0;
+    const portrait = w > 0 && h > 0 && h > w;
+    state.videoIsPortrait = portrait;
+    playerContainer.classList.toggle('is-portrait', portrait);
   }
 
   // Called from showHome / showDetail / showHistory / showAdmin (same
@@ -3435,6 +3597,9 @@
       // entry, unlock on exit. The manual flip button piggybacks on
       // the same locked state via state.flipSide.
       state.plyr.on('enterfullscreen', () => {
+        // Portrait video stays portrait in fullscreen — forcing landscape
+        // would letterbox it on its side. Landscape lock only for wide video.
+        if (state.videoIsPortrait) return;
         if (screen && screen.orientation && typeof screen.orientation.lock === 'function') {
           try {
             const p = screen.orientation.lock('landscape-primary');
@@ -3642,6 +3807,9 @@
           // the previously-picked subtitle.
           cachedEmbedded = null;
           updateCapValue('关闭');
+          // Re-evaluate portrait vs landscape now that the <video>
+          // knows its intrinsic dimensions for this episode.
+          applyVideoAspect();
         });
         updateCapValue();
 
@@ -3923,7 +4091,7 @@
     });
 
     // Track user-selected speed from Plyr's settings menu — but ignore
-    // transient changes caused by long-press 2× gesture.
+    // transient changes caused by long-press 3× gesture.
     state.plyr.on('ratechange', () => {
       if (state.gestureLongPressing) return;
       state.playerSpeed = state.plyr.speed;
@@ -3937,7 +4105,7 @@
   // Touch gestures (mobile / tablet):
   //   - double-tap left half  → rewind 10s
   //   - double-tap right half → forward 10s
-  //   - long press (≥ 450ms)  → playback speed 2×, release restores
+  //   - long press (≥ 450ms)  → playback speed 3×, release restores
   // Ignores taps landing on Plyr controls / menus / overlaid big play.
   // ------------------------------------------------------------------
   function attachPlayerGestures() {
@@ -3975,8 +4143,8 @@
         if (player.paused) return;
         state.gestureSavedSpeed = (state.plyr ? state.plyr.speed : player.playbackRate) || 1;
         state.gestureLongPressing = true;
-        setSpeed(2);
-        toast('2× 加速');
+        setSpeed(3);
+        toast('3× 加速');
       }, 450);
     }, { passive: true });
 
@@ -5513,7 +5681,12 @@
       const manageCheckbox = (state.manageMode && editableHere)
         ? `<div class="ep-check" data-icon="${state.selectedEpisodes.has(ep.file) ? 'checkbox-on' : 'checkbox'}"></div>`
         : '';
-      const submenuBtn = editableHere
+      // The submenu used to be editor-only; since the "下载" item
+      // (1.17.0) is available to every logged-in user — including for
+      // nested episodes, which stay read-only otherwise — the button
+      // now renders whenever a session exists. openEpisodeSubmenu
+      // hides the edit-only entries per-episode.
+      const submenuBtn = (state.user && !isSidebar)
         ? `<button type="button" class="ep-submenu-btn" data-file="${encodeURIComponent(ep.file)}" title="更多" aria-label="更多"><svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg></button>`
         : '';
       // Reorder grip — shown on the player sidebar (session queue) AND on
@@ -6101,13 +6274,27 @@
   function openEpisodeSubmenu(anchorBtn, file) {
     state.editingEpisodeFile = file;
     injectIcons(epMenu);
-    populateEpFollowSelect(file);
+    // Edit-only entries (edit / subtitle upload / move / copy / follow /
+    // delete + their dividers) require delete permission AND a
+    // non-nested episode — the backend edit routes only accept
+    // single-segment :file paths (path-traversal hardening), so nested
+    // rows stay read-only. "下载" has no such restriction: it goes
+    // through the static file mounts, which resolve nested paths fine.
+    const editable = canPerm('delete') && !file.includes('/');
+    for (const el of epMenu.querySelectorAll('.ep-edit-only')) {
+      el.hidden = !editable;
+    }
+    if (editable) populateEpFollowSelect(file);
     const rect = anchorBtn.getBoundingClientRect();
-    // Position popover below the button, clipped to viewport.
+    // Position popover below the button, clipped to viewport. Height
+    // estimate depends on how many entries survived the editable
+    // filter above — a download-only menu is a single ~44px row and
+    // flipping it 260px above the anchor would strand it mid-screen.
+    const estHeight = editable ? 260 : 52;
     let top = rect.bottom + 4;
     let left = rect.right - 160;  // popover width ~160
     if (left < 8) left = 8;
-    if (top + 260 > window.innerHeight) top = Math.max(8, rect.top - 260);
+    if (top + estHeight > window.innerHeight) top = Math.max(8, rect.top - estHeight);
     epMenu.style.top = top + 'px';
     epMenu.style.left = left + 'px';
     epMenu.hidden = false;
@@ -6157,6 +6344,25 @@
       } catch (err) { toast('删除失败: ' + err.message, 'error'); }
     } else if (action === 'move' || action === 'copy') {
       openBulkTargetDialog(action, [file], file);
+    } else if (action === 'download') {
+      // Deliberately minimal download path (1.17.0): reuse the raw
+      // byte-for-byte static mounts (/media, /audio-files, ... — all
+      // built by mediaUrl, which also resolves virtual-collection ids
+      // to the per-episode real collection) and let the browser's own
+      // download manager do the work via a same-origin <a download>
+      // click. Same-origin means the attribute is honored and the
+      // session cookie rides along, so auth matches playback exactly.
+      // No server changes, no transcode — the file lands on disk
+      // exactly as it sits on the NAS.
+      const a = document.createElement('a');
+      a.href = mediaUrl(state.currentCollection.id, file);
+      // Nested episodes carry their subdirectory in `file`
+      // ("Season 1/S01E01.mkv") — save under the bare filename.
+      a.download = file.split('/').pop();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      toast('已开始下载 ' + file.split('/').pop(), 'success');
     }
   });
 
@@ -6307,6 +6513,19 @@
       formatSize(ep.size),
     ].join(' · ');
 
+    // Media Session so phone lock-screen controls appear and the OS keeps
+    // background playback alive (fixes the ~5-7 min lock-screen stop). Use
+    // the collection cover as artwork when present; prev/next walk the queue.
+    setupMediaSession(player, {
+      title: ep.title || ep.file,
+      artist: collection.title || collection.id,
+      album: collection.title || collection.id,
+      artworkUrl: collection.cover ? mediaUrl(collection.id, collection.cover) : '',
+    }, {
+      onPrev: () => gotoEp(prevEpisode()),
+      onNext: () => gotoEp(nextEpisode()),
+    });
+
     mountVideoIn(playerContainer);
     videoPortal.style.display = 'block';
     hidePlayerError();
@@ -6321,6 +6540,11 @@
       // Tear down hls.js too so stale MSE buffers don't bleed into
       // the next ep's playback.
       disposeHls();
+
+      // Clear any prior portrait layout; applyVideoAspect re-evaluates
+      // once this episode's loadedmetadata reports real dimensions.
+      state.videoIsPortrait = false;
+      playerContainer.classList.remove('is-portrait');
 
       const saved = (state.progressAll[collection.id] || {})[ep.file];
       const freshStart = state.pendingFreshStart;
@@ -7381,6 +7605,75 @@
     panel.scrollTo({ top: target, behavior: 'smooth' });
   }
 
+  // ---- Watch-stats session tracker --------------------------------
+  // Tracks REAL watched seconds (excludes seeks/fast-forward) and the
+  // one-shot "crossed 70%" flag for the current play session, so each 5s
+  // progress beat can carry { sec, view } for the 观看记录 statistics.
+  // A new session starts on episode change or a seek back near the start.
+  const watchSession = {
+    key: null,        // subsystem '\x00' col '\x00' file
+    watchedSec: 0,    // accumulated since the last beat was sent
+    counted: false,   // already reported a view this session
+    maxFrac: 0,       // furthest fraction reached this session
+    lastT: 0,         // previous currentTime sample
+  };
+
+  /**
+   * Build the session key used to detect session boundaries.
+   * @param {string} subsystem @param {string} colId @param {string} file
+   * @returns {string}
+   */
+  function watchSessionKey(subsystem, colId, file) {
+    return subsystem + '\x00' + colId + '\x00' + file;
+  }
+
+  /**
+   * Reset the session for a new (subsystem,col,file) or a restart.
+   * @param {string} key @param {number} currentTime
+   */
+  function watchSessionReset(key, currentTime) {
+    watchSession.key = key;
+    watchSession.watchedSec = 0;
+    watchSession.counted = false;
+    watchSession.maxFrac = 0;
+    watchSession.lastT = currentTime || 0;
+  }
+
+  /**
+   * Sample a timeupdate tick. Accumulates only forward, small deltas
+   * (normal playback), discarding seeks/jumps. A jump back near the start
+   * begins a fresh viewing of the same item.
+   * @param {string} key @param {number} currentTime @param {number} duration
+   */
+  function watchSessionTick(key, currentTime, duration) {
+    if (watchSession.key !== key) watchSessionReset(key, currentTime);
+    const dt = currentTime - watchSession.lastT;
+    if (dt > 0 && dt < 2) watchSession.watchedSec += dt;          // normal play
+    if (currentTime + 1 < watchSession.lastT && currentTime < 3) { // restart
+      watchSession.counted = false;
+      watchSession.maxFrac = 0;
+    }
+    watchSession.lastT = currentTime;
+    if (duration > 0) watchSession.maxFrac = Math.max(watchSession.maxFrac, currentTime / duration);
+  }
+
+  /**
+   * Drain the pending watched-seconds delta and a possible one-shot view.
+   * Call this once per beat; it zeroes the seconds accumulator and latches
+   * the view flag so a session contributes at most one view per crossing.
+   * @returns {{sec:number, view:number}}
+   */
+  function watchSessionDrain() {
+    const sec = watchSession.watchedSec;
+    watchSession.watchedSec = 0;
+    let view = 0;
+    if (!watchSession.counted && watchSession.maxFrac >= 0.70) {
+      watchSession.counted = true;
+      view = 1;
+    }
+    return { sec: Math.round(sec * 1000) / 1000, view };
+  }
+
   // Bind progress-save + ended-advance handlers. Bound to both audio and
   // video sibling so video episodes inside an audio collection save
   // progress and auto-advance the same way audio episodes do. Handlers
@@ -7394,15 +7687,23 @@
       // Save progress every 5s
       if (!state.user || !state.currentFile || !state.currentCollection) return;
       if (state.kind !== 'audio') return;
+      // Tick the watch-stats session on EVERY timeupdate so watched-seconds
+      // accumulate from small (~0.25s) deltas (the <2s playback filter); only
+      // the progress POST below is throttled to 5s.
+      watchSessionTick(watchSessionKey('audio', state.currentCollection.id, state.currentFile),
+        audioPlayerEl.currentTime, isFinite(audioPlayerEl.duration) ? audioPlayerEl.duration : 0);
       const now = Date.now();
       if (now - lastAudioSave < 5000) return;
       lastAudioSave = now;
       if (!isFinite(audioPlayerEl.currentTime) || audioPlayerEl.currentTime <= 0) return;
       const id = state.currentCollection.id;
       const file = state.currentFile;
+      const drained = watchSessionDrain();
       api('POST', `/api/progress/${encodeURIComponent(id)}/${encodeURIComponent(file)}`, {
         position: audioPlayerEl.currentTime,
         duration: isFinite(audioPlayerEl.duration) ? audioPlayerEl.duration : null,
+        sec: drained.sec,
+        view: drained.view,
       }).catch(() => {});
       if (!state.progressAll[id]) state.progressAll[id] = {};
       state.progressAll[id][file] = Object.assign({}, state.progressAll[id][file] || {}, {
@@ -7418,9 +7719,15 @@
       const np = state.audioNowPlaying;
       if (state.user && np && np.col && np.file
           && isFinite(audioPlayerEl.duration) && audioPlayerEl.duration > 0) {
+        // Force the session to its end so a finished track counts its view.
+        watchSessionTick(watchSessionKey('audio', np.col.id, np.file),
+          audioPlayerEl.duration, audioPlayerEl.duration);
+        const drained = watchSessionDrain();
         api('POST', `/api/progress/${encodeURIComponent(np.col.id)}/${encodeURIComponent(np.file)}`, {
           position: audioPlayerEl.duration,
           duration: audioPlayerEl.duration,
+          sec: drained.sec,
+          view: drained.view,
         }).catch(() => {});
       }
       if (state.loopMode) {
@@ -8872,15 +9179,23 @@
     } else {
       skipIntroBtn.hidden = true;
     }
+    // Tick the watch-stats session on EVERY timeupdate so watched-seconds
+    // accumulate from small (~0.25s) deltas (the <2s playback filter); only
+    // the progress POST below is throttled to 5s.
+    watchSessionTick(watchSessionKey('video', state.currentCollection.id, state.currentFile),
+      player.currentTime, isFinite(player.duration) ? player.duration : 0);
     const now = Date.now();
     if (now - lastProgressSave < 5000) return;
     lastProgressSave = now;
     if (!isFinite(player.currentTime) || player.currentTime <= 0) return;
     const id = state.currentCollection.id;
     const file = state.currentFile;
+    const drained = watchSessionDrain();
     api('POST', `/api/progress/${encodeURIComponent(id)}/${encodeURIComponent(file)}`, {
       position: player.currentTime,
       duration: isFinite(player.duration) ? player.duration : null,
+      sec: drained.sec,
+      view: drained.view,
     }).catch(() => {});
     if (!state.progressAll[id]) state.progressAll[id] = {};
     state.progressAll[id][file] = Object.assign({}, state.progressAll[id][file] || {}, {
@@ -8894,9 +9209,13 @@
     const id = state.currentCollection.id;
     const file = state.currentFile;
     if (isFinite(player.duration) && player.duration > 0) {
+      watchSessionTick(watchSessionKey('video', id, file), player.duration, player.duration);
+      const drained = watchSessionDrain();
       api('POST', `/api/progress/${encodeURIComponent(id)}/${encodeURIComponent(file)}`, {
         position: player.duration,
         duration: player.duration,
+        sec: drained.sec,
+        view: drained.view,
       }).catch(() => {});
       if (!state.progressAll[id]) state.progressAll[id] = {};
       state.progressAll[id][file] = {
@@ -8946,12 +9265,12 @@
   }
 
   // ------------------------------------------------------------------
-  // Desktop "tap to seek / hold to 2×" state.
+  // Desktop "tap to seek / hold to 3×" state.
   //
   // Seek does NOT happen on keydown. Instead:
   //   keydown  → start a hold timer
   //   keyup (before timer fires) → it was a tap, do the ±10s seek now
-  //   timer fires (still held)   → enter 2× speed, suppress later seek
+  //   timer fires (still held)   → enter 3× speed, suppress later seek
   //   keyup (in hold mode)       → restore original speed
   // This guarantees a held key never produces the initial seek jump.
   // ------------------------------------------------------------------
@@ -8963,12 +9282,12 @@
     if (player.paused) return;
     state.desktopHoldSpeedOrig = (state.plyr ? state.plyr.speed : player.playbackRate) || 1;
     state.desktopHoldSpeed = true;
-    state.gestureLongPressing = true;  // reuse guard so ratechange doesn't persist 2x
+    state.gestureLongPressing = true;  // reuse guard so ratechange doesn't persist 3x
     try {
-      if (state.plyr) state.plyr.speed = 2;
-      else player.playbackRate = 2;
+      if (state.plyr) state.plyr.speed = 3;
+      else player.playbackRate = 3;
     } catch (e) {}
-    toast('2× 加速');
+    toast('3× 加速');
   }
   function exitHoldSpeed() {
     if (!state.desktopHoldSpeed) return;
@@ -9713,6 +10032,269 @@
       toast('已清空历史');
     } catch (err) { toast('失败: ' + err.message, 'error'); }
   });
+
+  // ==================================================================
+  // WATCH STATS (观看记录总览) — calendar-laid-out viewing record.
+  // Month/Quarter/Year/All tabs; month & quarter day-cells drill into a
+  // per-day detail (which episodes, how many times, how long). Heat color
+  // of each cell scales with that period's max watched-seconds.
+  // ==================================================================
+  if (watchStatsBtn) watchStatsBtn.addEventListener('click', () => navigate('#/history/stats'));
+
+  /**
+   * @brief Format seconds as a compact duration label (e.g. 1h20m / 5m / 9s).
+   * @param {number} sec @returns {string} empty string when sec <= 0
+   */
+  function wsFmtDur(sec) {
+    sec = Math.round(sec || 0);
+    if (sec <= 0) return '';
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    if (h) return h + 'h' + (m ? m + 'm' : '');
+    if (m) return m + 'm';
+    return s + 's';
+  }
+  /**
+   * @brief Map a value to a 0..4 heat bucket relative to the visible max.
+   * @param {number} v @param {number} max @returns {number}
+   */
+  function wsHeat(v, max) {
+    if (!max || v <= 0) return 0;
+    return Math.min(4, Math.ceil((v / max) * 4));
+  }
+  /** @brief Format a local Date as YYYY-MM-DD. */
+  function wsDayKey(d) {
+    const p2 = (n) => (n < 10 ? '0' + n : '' + n);
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  }
+  /** @brief Current anchor as a Date (today when anchor is null). */
+  function wsAnchorDate() {
+    if (state.ws.anchor) { const p = state.ws.anchor.split('-'); return new Date(+p[0], +p[1] - 1, +p[2]); }
+    return new Date();
+  }
+  /** @brief Human label for the current range, by period. */
+  function wsRangeLabel(period, d) {
+    if (period === 'month')   return `${d.getFullYear()}年${d.getMonth() + 1}月`;
+    if (period === 'quarter') return `${d.getFullYear()}年 第${Math.floor(d.getMonth() / 3) + 1}季度`;
+    if (period === 'year')    return `${d.getFullYear()}年`;
+    return '全部';
+  }
+  /** @brief Index a byDay array into { 'YYYY-MM-DD': {seconds,views} }. */
+  function wsDayMap(byDay) {
+    const m = {}; (byDay || []).forEach((r) => { m[r.date] = r; }); return m;
+  }
+  /** @brief Index a byMonth array into { 'YYYY-MM': {seconds,views} }. */
+  function wsMonthMap(byMonth) {
+    const m = {}; (byMonth || []).forEach((r) => { m[r.month] = r; }); return m;
+  }
+
+  async function showWatchStats() {
+    maybeActivateMiniPlayer();
+    maybeActivateAudioMini();
+    hideAllViews();
+    resetHeaderActions();
+    backBtn.hidden = false;
+    title.textContent = 'WATCH STATS';
+    viewWatchStats.hidden = false;
+    $('ws-day-detail').hidden = true;
+    if (!state.user) { navigate('#/login'); return; }
+    renderWatchStats();
+  }
+
+  /** @brief Fetch + render the current period (tabs/nav already in DOM). */
+  async function renderWatchStats() {
+    const period = state.ws.period;
+    const anchor = state.ws.anchor || wsDayKey(new Date());
+    document.querySelectorAll('.ws-tab').forEach((t) =>
+      t.classList.toggle('active', t.dataset.period === period));
+    $('ws-range-label').textContent = wsRangeLabel(period, wsAnchorDate());
+    $('ws-prev').style.visibility = period === 'all' ? 'hidden' : '';
+    $('ws-next').style.visibility = period === 'all' ? 'hidden' : '';
+    $('ws-body').innerHTML = renderSkeletonList(3);
+    let data;
+    try {
+      data = await api('GET', `/api/watch-stats?period=${period}&anchor=${encodeURIComponent(anchor)}`);
+    } catch (e) {
+      $('ws-body').innerHTML = `<div class="cards-status error">加载失败: ${escapeHtml(e.message)}</div>`;
+      $('ws-summary').innerHTML = '';
+      return;
+    }
+    renderWsSummary($('ws-summary'), data.totals);
+    if (period === 'month')        renderWsMonth(data);
+    else if (period === 'quarter') renderWsQuarter(data);
+    else if (period === 'year')    renderWsYear(data);
+    else                           renderWsAll(data);
+  }
+
+  /** @brief Render the overview line (views · duration · episode count). */
+  function renderWsSummary(el, totals) {
+    el.innerHTML =
+      `<span class="ws-stat"><b>${totals.views}</b> 次</span>` +
+      `<span class="ws-stat"><b>${escapeHtml(wsFmtDur(totals.seconds) || '0s')}</b></span>` +
+      `<span class="ws-stat"><b>${totals.episodes}</b> 集</span>`;
+  }
+
+  /**
+   * @brief Build one month's calendar grid HTML.
+   * @param {number} year @param {number} month0  0-based month
+   * @param {object} dayMap  date -> {seconds,views}
+   * @param {number} maxSec  visible max for heat scaling
+   * @param {boolean} mini   compact (quarter) vs full (month)
+   * @returns {string}
+   */
+  function wsMonthGridHtml(year, month0, dayMap, maxSec, mini) {
+    const first = new Date(year, month0, 1);
+    const startDow = (first.getDay() + 6) % 7; // Monday = 0
+    const daysInMonth = new Date(year, month0 + 1, 0).getDate();
+    const week = ['一', '二', '三', '四', '五', '六', '日'];
+    let cells = week.map((w) => `<div class="ws-cal-dow">${w}</div>`).join('');
+    for (let i = 0; i < startDow; i++) cells += `<div class="ws-cal-cell empty"></div>`;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const key = wsDayKey(new Date(year, month0, d));
+      const row = dayMap[key];
+      const sec = row ? row.seconds : 0;
+      const views = row ? row.views : 0;
+      const lvl = wsHeat(sec, maxSec);
+      const hasData = sec > 0 || views > 0;
+      const body = (hasData && !mini)
+        ? `<span class="ws-cal-dur">${escapeHtml(wsFmtDur(sec) || '0s')}</span><span class="ws-cal-cnt">${views} 次</span>`
+        : '';
+      cells += `<div class="ws-cal-cell heat-${lvl}${hasData ? ' has-data' : ''}" data-day="${key}"` +
+               (mini && hasData ? ` title="${key} ${escapeHtml(wsFmtDur(sec) || '0s')} · ${views} 次"` : '') +
+               `><span class="ws-cal-num">${d}</span>${body}</div>`;
+    }
+    const titleHtml = mini ? `<div class="ws-cal-title">${year}年${month0 + 1}月</div>` : '';
+    return `<div class="ws-cal${mini ? ' mini' : ''}">${titleHtml}<div class="ws-cal-grid">${cells}</div></div>`;
+  }
+
+  function renderWsMonth(data) {
+    const d = wsAnchorDate();
+    const dayMap = wsDayMap(data.byDay);
+    const maxSec = Math.max(0, ...data.byDay.map((r) => r.seconds));
+    $('ws-body').innerHTML = wsMonthGridHtml(d.getFullYear(), d.getMonth(), dayMap, maxSec, false);
+    wsBindDayCells();
+  }
+
+  function renderWsQuarter(data) {
+    const d = wsAnchorDate();
+    const q = Math.floor(d.getMonth() / 3);
+    const dayMap = wsDayMap(data.byDay);
+    const maxSec = Math.max(0, ...data.byDay.map((r) => r.seconds));
+    let html = '';
+    for (let i = 0; i < 3; i++) html += wsMonthGridHtml(d.getFullYear(), q * 3 + i, dayMap, maxSec, true);
+    $('ws-body').innerHTML = `<div class="ws-quarter">${html}</div>`;
+    wsBindDayCells();
+  }
+
+  function renderWsYear(data) {
+    const d = wsAnchorDate();
+    const mm = wsMonthMap(data.byMonth);
+    const maxSec = Math.max(0, ...data.byMonth.map((r) => r.seconds));
+    let cells = '';
+    for (let m0 = 0; m0 < 12; m0++) {
+      const key = d.getFullYear() + '-' + (m0 + 1 < 10 ? '0' : '') + (m0 + 1);
+      const row = mm[key];
+      const sec = row ? row.seconds : 0, views = row ? row.views : 0;
+      const hasData = sec > 0 || views > 0;
+      cells += `<div class="ws-month-cell heat-${wsHeat(sec, maxSec)}${hasData ? ' has-data' : ''}" ` +
+               `data-month="${key}"><span class="ws-month-num">${m0 + 1}月</span>` +
+               (hasData ? `<span class="ws-cal-dur">${escapeHtml(wsFmtDur(sec) || '0s')}</span><span class="ws-cal-cnt">${views} 次</span>` : '') +
+               `</div>`;
+    }
+    $('ws-body').innerHTML = `<div class="ws-year-grid">${cells}</div>`;
+    wsBindMonthCells();
+  }
+
+  function renderWsAll(data) {
+    const mm = wsMonthMap(data.byMonth);
+    const maxSec = Math.max(0, ...data.byMonth.map((r) => r.seconds));
+    const years = Array.from(new Set(data.byMonth.map((r) => r.month.slice(0, 4)))).sort().reverse();
+    if (!years.length) { $('ws-body').innerHTML = '<div class="cards-status">还没有观看记录</div>'; return; }
+    let rows = '';
+    for (const y of years) {
+      let cells = `<span class="ws-allyear-label">${y}</span>`;
+      for (let m0 = 0; m0 < 12; m0++) {
+        const key = y + '-' + (m0 + 1 < 10 ? '0' : '') + (m0 + 1);
+        const row = mm[key]; const sec = row ? row.seconds : 0; const views = row ? row.views : 0;
+        const hasData = sec > 0 || views > 0;
+        cells += `<div class="ws-allmonth heat-${wsHeat(sec, maxSec)}${hasData ? ' has-data' : ''}" ` +
+                 `data-month="${key}" title="${y}年${m0 + 1}月 ${escapeHtml(wsFmtDur(sec) || '无')}${hasData ? ' · ' + views + ' 次' : ''}"></div>`;
+      }
+      rows += `<div class="ws-allyear-row">${cells}</div>`;
+    }
+    $('ws-body').innerHTML = `<div class="ws-all">${rows}</div>`;
+    wsBindMonthCells();
+  }
+
+  /** @brief Wire day cells (month/quarter) to open the day-detail panel. */
+  function wsBindDayCells() {
+    $('ws-body').querySelectorAll('.ws-cal-cell.has-data').forEach((el) =>
+      el.addEventListener('click', () => showWsDayDetail(el.dataset.day)));
+  }
+  /** @brief Wire month cells (year/all) to jump into that month's month view. */
+  function wsBindMonthCells() {
+    $('ws-body').querySelectorAll('[data-month].has-data').forEach((el) =>
+      el.addEventListener('click', () => {
+        const parts = el.dataset.month.split('-');
+        state.ws.period = 'month';
+        state.ws.anchor = `${parts[0]}-${parts[1]}-01`;
+        renderWatchStats();
+      }));
+  }
+
+  /** @brief Load + render the per-day detail (which episodes, count, time). */
+  async function showWsDayDetail(dayKey) {
+    const panel = $('ws-day-detail');
+    panel.hidden = false;
+    $('ws-day-title').textContent = dayKey;
+    $('ws-day-summary').innerHTML = '';
+    $('ws-day-list').innerHTML = renderSkeletonList(3);
+    let data;
+    try {
+      data = await api('GET', `/api/watch-stats?period=day&anchor=${encodeURIComponent(dayKey)}`);
+    } catch (e) {
+      $('ws-day-list').innerHTML = `<li class="cards-status error">加载失败: ${escapeHtml(e.message)}</li>`;
+      return;
+    }
+    renderWsSummary($('ws-day-summary'), data.totals);
+    if (!data.byEpisode.length) {
+      $('ws-day-list').innerHTML = '<li class="cards-status">这天没有观看记录</li>';
+      return;
+    }
+    $('ws-day-list').innerHTML = data.byEpisode.map((e) => {
+      const gone = e.exists ? '' : ' <span class="history-gone">(已删除)</span>';
+      const thumb = e.cover ? `style="${coverVarsStyle(e)}"` : '';
+      const kindTag = e.subsystem === 'audio' ? '♪ ' : '';
+      return `<li class="ws-ep-row">
+        <div class="history-thumb" ${thumb}></div>
+        <div class="ws-ep-meta">
+          <div class="ws-ep-title">${kindTag}${escapeHtml(e.title)} · ${escapeHtml(e.episodeTitle)}${gone}</div>
+          <div class="ws-ep-sub mono">${e.views} 次 · ${escapeHtml(wsFmtDur(e.seconds) || '0s')}</div>
+        </div></li>`;
+    }).join('');
+  }
+
+  /** @brief Step the anchor by ±1 unit of the current period. */
+  function wsShiftAnchor(dir) {
+    if (state.ws.period === 'all') return;
+    const d = wsAnchorDate();
+    if (state.ws.period === 'month')        d.setMonth(d.getMonth() + dir);
+    else if (state.ws.period === 'quarter') d.setMonth(d.getMonth() + dir * 3);
+    else if (state.ws.period === 'year')    d.setFullYear(d.getFullYear() + dir);
+    state.ws.anchor = wsDayKey(d);
+    renderWatchStats();
+  }
+
+  // Tab / nav / detail-back bindings (registered once).
+  document.querySelectorAll('.ws-tab').forEach((t) => t.addEventListener('click', () => {
+    state.ws.period = t.dataset.period;
+    if (state.ws.period === 'all') state.ws.anchor = null;
+    else if (!state.ws.anchor) state.ws.anchor = wsDayKey(new Date());
+    $('ws-day-detail').hidden = true;
+    renderWatchStats();
+  }));
+  if ($('ws-prev')) $('ws-prev').addEventListener('click', () => wsShiftAnchor(-1));
+  if ($('ws-next')) $('ws-next').addEventListener('click', () => wsShiftAnchor(1));
+  if ($('ws-day-back')) $('ws-day-back').addEventListener('click', () => { $('ws-day-detail').hidden = true; });
 
   // ==================================================================
   // ADMIN

@@ -1,7 +1,29 @@
 {
-  "version": "Release1.14.0",
-  "versionNums": "1.14.0",
+  "version": "Release1.17.0",
+  "versionNums": "1.17.0",
   "changelog": [
+    {
+      "version": "Release1.17.0",
+      "date": "2026-07-11",
+      "changes": [
+        "新功能：单集手动下载。剧集列表每行「⋮ 更多」子菜单新增『下载』项，点击即用浏览器自带下载管理器把该集原始文件存到本地。刻意做成最简实现（用户原话『不要很强大，能够一集一集手动下就行』）：前端在子菜单点击时动态建一个 same-origin <a download> 指向现有的原始文件静态挂载（视频 /media、音频 /audio-files 等，统一由 mediaUrl 构 URL，虚拟合集 __all_audio__/__liked_* 的每集 _collectionId 也照常解析）并触发点击——same-origin 下 download 属性必被浏览器尊重、会话 cookie 随请求带上，鉴权与播放完全一致；服务端零改动、无转码，落盘文件与 NAS 上逐字节相同（嵌套集保存为裸文件名）。配套改动：子菜单「⋮」按钮从「仅编辑者可见」放宽为「登录即可见」（含嵌套子目录集的行，此前嵌套行完全没有子菜单入口），原有 编辑/上传字幕/移动/复制/跟随/删除 六项加 .ep-edit-only 标记，openEpisodeSubmenu 每次打开按 canPerm('delete') && 非嵌套 逐项显隐——非编辑者与嵌套集看到的菜单只有『下载』一项，编辑语义与权限边界零变化；弹层向上翻转的高度估算随之按可见项数取 260/52。新增 ICONS.download 图标（upload 的镜像）。改动文件：public/index.html（ep-menu 加下载项 + .ep-edit-only 标记）、public/app.js（图标 + submenuBtn 渲染条件 + openEpisodeSubmenu 显隐 + download action）、version.json。MINOR bump 自动破前端缓存（app.js?v=Release1.17.0）。Why：用户需求「给这个项目提供一个文件下载功能，不要很强大，能够一集一集手动下就行」。"
+      ]
+    },
+    {
+      "version": "Release1.16.0",
+      "date": "2026-06-20",
+      "changes": [
+        "Bug 修复：手机锁屏 / 切后台播放约 5-7 分钟后自动停止。Root cause：全站从未启用 W3C Media Session API，移动浏览器（尤以 Android Chrome）把锁屏 / 后台标签页当作普通空闲页面——宽限期后先节流再冻结整个页面，于是 fmp4-mse 直流的 fetch 抽水循环、HLS 的分段加载都停摆，有界媒体缓冲放完即死（约 5-7 分钟）。修法：新增 setupMediaSession(mediaEl, meta, nav)（public/app.js），为当前播放的 <video>/<audio> 声明 MediaMetadata（标题=剧集名、artist/album=合集名、artwork=合集封面 / 音频每集封面）+ 注册 play/pause/seekbackward/seekforward/seekto/previoustrack/nexttrack 动作处理器；prev/next 视频走 gotoEp(nextEpisode/prevEpisode)、音频走 nextTrackIn/prevTrackIn(audioNowPlaying)。声明 Media Session 后系统才把页面视作真正的媒体播放、后台保活并弹出锁屏控件。playbackState 与 setPositionState 通过每元素一次性绑定的 play/pause/ratechange/durationchange/timeupdate 监听同步（dataset.msStateWired 守卫，全局媒体元素跨集只绑一次）。无 navigator.mediaSession 的浏览器静默降级为 no-op。视频入口在 showPlayer 定位 ep 后调用，音频入口在 loadAudioTrack play() 后调用。Why：待办清单「手机后台播放（锁屏）时会在约 5-7 分钟后自动停止播放」。",
+        "新功能：竖屏视频直接竖屏播。新增 applyVideoAspect()（public/app.js），在 Plyr loadedmetadata 钩子里读 player.videoWidth/videoHeight，当 height>width 时给 #player-container 加 .is-portrait 类并置 state.videoIsPortrait（适用于 native / HLS / fmp4-mse 各路 lane，元数据就绪后才判定）。CSS（public/style.css）：桌面端 #player-container 本就是高弹性区 + object-fit:contain，竖屏视频已能满高居中，无需改动；手机端原本被钉死 aspect-ratio:16/9 + max-height:50vh 会把竖屏视频压成一条缝，故 @media (max-width:768px) 下 #player-container.is-portrait 改 aspect-ratio:9/16 + max-height:76vh（id+class 选择器特异性高于裸 #player-container，与源码顺序无关），让竖屏内容占满手机屏；max-height 留白保证 #player-info 与剧集列表仍可达。全屏：enterfullscreen 对 state.videoIsPortrait 直接 return 跳过 landscape 朝向锁定，竖屏视频全屏保持竖屏。切集时（!sameVideo）先清 .is-portrait + state.videoIsPortrait，待新集 loadedmetadata 重新判定，避免上一集竖屏布局残留闪烁。Why：待办清单「需要适配竖屏视频的播放，如果一个视频是竖屏格式那就直接竖屏播」。"
+      ]
+    },
+    {
+      "version": "Release1.15.0",
+      "date": "2026-06-09",
+      "changes": [
+        "新功能：观看记录总览（高级观看记录）。从「播放历史」页头新增『观看记录』按钮进入子页面 #/history/stats，以日历排版展示视频+音频的观看统计。主 tab = 月/季/年/总（默认月）；月/季为日历网格，单格显示当天观看时长+次数、背景色按当天时长热力分档，点单格下钻到『天详情』（当天看了哪些视频/音频、各几次、各多久）；年视图为 12 个月格、点月跳到该月月视图；总视图为逐年×12月热力图、点月跳月视图。数据采集：复用现有每 5s 进度心跳，前端用 watchSession 跟踪『实际观看秒数』（只累加正常播放的小增量，自动排除拖动/快进）与『单集进度首次过 70% 记一次』的一次性 view 标志，随心跳带 {sec,view} 上报；服务端在 POST /api/progress 内（仅 video/audio）尽力而为地调 watchStats.record 累加到当天格子，绝不影响进度保存本身。新增按日聚合存储 lib/watch-stats.js（不存原始心跳、只存按日小格子，规避 DS124 1GB RAM 底线；forward-only，过去无法回溯），含 node:test 单测 test/watch-stats.test.js；新增全局只读查询 GET /api/watch-stats?period=day|month|quarter|year|all&anchor=YYYY-MM-DD，按周期聚合 byDay/byMonth/byEpisode/totals 并由服务端补 title/cover。改动文件：lib/watch-stats.js(新增)、test/watch-stats.test.js(新增)、server.js(建 store+init+心跳内联 record+查询路由)、public/index.html(入口按钮+view-watch-stats section)、public/app.js(心跳采集 sec/view+路由+日历渲染+天详情)、public/style.css(日历/热力/天详情样式)、public/language/{zh,zh-TW,en}.json(文案)。Why：已知问题汇总「我需要一个高级观看记录，可以看到哪个视频在哪天看了几次，多长时间……日周月季年总结……作为观看历史的子页面」。"
+      ]
+    },
     {
       "version": "Release1.14.0",
       "date": "2026-06-08",
